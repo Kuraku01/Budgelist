@@ -1,98 +1,105 @@
-# Budgelist
+# Budgelist 🚀 `v1.0.0-beta`
 
-Log spending, catch recurring bills, and see a trend-line forecast of
-where you'll land this month against your budget.
+> Log spending, catch recurring bills, and forecast your monthly budget with local-first offline speed and seamless cloud synchronization.
 
-Plain HTML/CSS/JS, Firebase (Auth + Firestore) for cross-device sync,
-Chart.js for the forecast chart. Built to be wrapped as a native app with
-Capacitor.
+Budgelist is a modern, responsive personal finance and budgeting application built with plain HTML5, CSS3, and JavaScript, packaged with Capacitor for native Android deployment and powered by Firebase (Auth + Firestore).
 
-## Features
+---
 
-- Email/password login, synced across devices via Firestore
-- Add, edit, and delete expenses
-- Swipe or tap through past months (chart and totals update per month)
-- Recurring bills — set a day of the month and an expense is logged
-  automatically once that day arrives
-- Forecast chart (least-squares trend line) with a budget warning banner
-- Light/dark mode toggle
-- Export the current month as CSV (shares via the native share sheet on
-  phones, downloads directly on desktop)
+## ✨ Features
 
-## 1. Create a Firebase project (free tier is enough)
+### ⚡ Local-First & Offline Architecture
+- **Instant 0ms App Startup**: Logged-in users load their budget, expenses, and forecast instantly from local cache without waiting for network calls.
+- **Offline Mutations**: Add, edit, or delete expenses, recurring bills, and budget targets completely offline. Changes are stored in a local sync queue and automatically pushed to the cloud when connected.
 
-1. Go to https://console.firebase.google.com → **Add project**.
-2. **Build → Authentication → Get started** → enable **Email/Password**.
-3. **Build → Firestore Database → Create database** → start in
-   **production mode** (the included `firestore.rules` locks it down).
-4. **Project settings → General → Your apps → Web (</>)**, register an
-   app, and copy the `firebaseConfig` object it gives you.
-5. Paste those values into `www/firebase-config.js`.
-6. **Firestore → Rules** → paste in `firestore.rules` → **Publish**.
+### 🔄 Realtime Cloud Sync & Pull-to-Refresh
+- **Multi-Device Synchronization**: Syncs expenses, recurring bills, and budget settings across all your mobile and web devices.
+- **Pull-to-Refresh Gesture**: Swipe down from the top of the screen anytime to pull and fetch the latest cloud data.
+- **Manual & Auto Sync Modes**: Choose between automatic background sync or manual sync via the topbar controls.
 
-## 2. Run it in a browser first
+### 👤 Guest Account Mode
+- **Instant Guest Access**: Jump straight into budgeting without creating an account.
+- **Data Safety Warning**: Displays a confirmation modal explaining local storage persistence before entering guest mode.
 
-No build step — it's static files. Serve them locally (opening
-`index.html` directly won't work because of ES modules):
+### 🔑 Username & Email Authentication
+- **Unique Username Signup**: Choose a unique username during registration.
+- **Flexible Login**: Sign in using either your email address or unique username.
+- **Email Verification**: Unverified cloud accounts receive an email verification prompt with a quick resend option.
+
+### 📶 Realtime Network Monitor
+- **Background Network Detection**: Continuously checks connectivity status in the background.
+- **Floating Status Banner**: Displays a floating status pill with a red X mark when offline (*"Offline — changes saved locally"*) and transitions to a green checkmark (*"Connection restored — synced!"*) when internet is restored.
+- **Network Retry Modal**: Protects cloud login and signup with an interactive Retry/Cancel modal when offline.
+
+### ⚙️ Compact Accordion Settings
+- **Space-Saving Category Accordions**: Collapsible sections for Profile, Appearance, Sync Options, Export, About, and Account actions.
+- **Profile Customization**: Choose from 5 preset avatars (`🦊`, `🐱`, `🚀`, `💎`, `👤`) and save your display name.
+- **About & Release Notes**: Check for updates and view full `v1.0.0-beta` release notes inside settings.
+
+### 📊 Hand-Drawn Inline SVG Charts
+- **Zero External Dependencies**: Fast, lightweight inline SVG rendering that works 100% offline.
+- **Category Breakdown**: Toggle between Donut Chart and Bar Chart views.
+- **Least-Squares Forecast**: Calculates a least-squares trendline across cumulative daily spending to project end-of-month budget targets.
+
+### 💾 Native Android CSV Export
+- **Android MediaStore Integration**: Export monthly expenses directly into the Android device's **Downloads** folder using native Java bridge APIs.
+
+---
+
+## 🛠️ Project Structure
+
+```
+android/                  Native Android Studio project (Capacitor wrapper)
+  app/src/main/
+    java/.../MainActivity.java  Native Android bridge (MediaStore file exporter & Web interface)
+    assets/public/        Web app assets (HTML, CSS, JS, Firebase config)
+www/                      Web source assets (synced with Capacitor)
+  index.html              UI structure (screens, sheets, modals, status banners, settings accordions)
+  style.css               Budgelist visual identity & light/dark design system
+  app.js                  Sync engine, auth logic, local cache, gesture handlers, chart rendering
+  firebase-config.js      Firebase project keys
+firestore.rules           Firestore security rules (user isolation & username lookup)
+capacitor.config.json     Capacitor project configuration
+```
+
+---
+
+## 🚀 Setup & Installation
+
+### 1. Firebase Configuration
+
+1. Go to [Firebase Console](https://console.firebase.google.com) and create a project.
+2. Enable **Authentication** -> **Email/Password**.
+3. Enable **Firestore Database** in production mode.
+4. Go to **Project Settings -> Web App (</>)**, copy your `firebaseConfig` object, and paste it into `www/firebase-config.js` and `android/app/src/main/assets/public/firebase-config.js`.
+5. In Firestore **Rules**, paste the contents of `firestore.rules` and click **Publish**.
+
+### 2. Local Web Development
 
 ```bash
+# Serve locally via npm or python
 npx serve www
 # or: cd www && python3 -m http.server 8080
 ```
 
-Create an account, add a few expenses across different days, add a
-recurring bill, and try the month arrows and the theme toggle.
-
-## 3. Wrap it with Capacitor
-
-Capacitor needs the web files in their own folder (that's the `www/`
-folder here) — `--web-dir=.` is rejected as invalid. Run these from the
-project root (the folder containing `www/`):
+### 3. Android Native Build (Capacitor)
 
 ```bash
-npm init -y
-npm install @capacitor/core @capacitor/cli
-npx cap init "Budgelist" "com.yourname.budgelist" --web-dir=www
+# Install dependencies
+npm install
 
-npm install @capacitor/android      # and/or: npm install @capacitor/ios
-npx cap add android                 # and/or: npx cap add ios
-npx cap sync
-npx cap open android                # opens Android Studio (or `ios` for Xcode)
+# Copy web assets to Android native project
+npx cap sync android
+
+# Open project in Android Studio
+npx cap open android
 ```
 
-After any change to files in `www/`, run `npx cap sync` again to copy
-them into the native project.
+Run `assembleDebug` or deploy directly to your device/emulator from Android Studio.
 
-Run it from Android Studio / Xcode onto an emulator or device. The app
-talks to Firebase over HTTPS, so no extra Capacitor plugin is required —
-just make sure the device has internet access. The CSV export uses the
-Web Share API, which Capacitor's WebView supports on both platforms; it
-falls back to a plain download if sharing isn't available.
+---
 
-## How the forecast works
+## 📝 License & Authors
 
-For the month being viewed, daily spending is summed into a running
-cumulative total. A least-squares line (the same idea as a spreadsheet
-trendline) is fit through those points. For the current month, that
-line is extended to the last day to project a month-end total; for a
-past month, the line is informational only since the data is final.
-Crossing the set budget triggers the warning banner.
-
-## How recurring bills work
-
-Each recurring bill is a template (`amount`, `category`, `note`,
-`dayOfMonth`). On load, Budgelist checks whether today's date has
-passed each template's day for the current month and, if no matching
-expense exists yet, creates one automatically and tags it with the
-template's ID — so it won't be generated twice.
-
-## Project structure
-
-```
-www/
-  index.html          UI structure (auth, main screen, add/edit/recurring/budget sheets)
-  style.css           Budgelist visual identity, light + dark themes
-  app.js              Auth, Firestore sync, month nav, forecast, export, rendering
-  firebase-config.js  Your Firebase project keys (fill this in)
-firestore.rules       Security rules — each user can only read/write their own data
-```
+Developed with ❤️ by **Kuraku & Budgelist Team**.  
+Built for personal finance tracking with privacy and local speed in mind.
