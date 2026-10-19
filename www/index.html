@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Budgelist</title>
+  <script>
+    // Apply saved theme before paint to avoid a flash of the wrong theme.
+    try {
+      var t = localStorage.getItem("budgelist-theme");
+      if (t) document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- AUTH SCREEN -->
+<section id="auth-screen" class="screen hidden">
+  <div class="auth-card">
+    <p class="brand">Budgelist</p>
+    <h1 id="auth-title">Budget, listed.</h1>
+    <p id="auth-sub" class="sub">Log spending, catch recurring bills, and see where the month is headed before it's over.</p>
+
+    <form id="auth-form">
+      <div id="username-field-wrap" class="hidden">
+        <label for="username">Username</label>
+        <input type="text" id="username" autocomplete="username" placeholder="e.g. alex" />
+      </div>
+
+      <label for="auth-id" id="auth-id-label">Email or Username</label>
+      <input type="text" id="auth-id" required autocomplete="username" />
+
+      <label for="password">Password</label>
+      <input type="password" id="password" required autocomplete="current-password" minlength="6" />
+
+      <p id="auth-error" class="error"></p>
+      <div class="auth-actions">
+        <button type="submit" id="main-auth-btn" class="btn-primary">Log in</button>
+        <button type="button" id="toggle-auth-mode-btn" class="btn-ghost">Create account</button>
+      </div>
+    </form>
+
+    <div class="auth-divider"><span>or</span></div>
+    <button type="button" id="guest-btn" class="btn-ghost" style="width: 100%;">Continue as Guest</button>
+  </div>
+</section>
+
+<!-- GUEST WARNING MODAL -->
+<div id="guest-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <h2>Continue as Guest?</h2>
+    <p>Guest data is saved locally on this device only and will be permanently lost if you clear app data or uninstall the app.</p>
+    <div class="modal-actions">
+      <button type="button" id="cancel-guest" class="btn-ghost">Cancel</button>
+      <button type="button" id="confirm-guest" class="btn-primary">Continue as Guest</button>
+    </div>
+  </div>
+</div>
+
+<!-- NETWORK OFFLINE MODAL -->
+<div id="network-modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+  <div class="modal-card">
+    <h2 id="network-modal-title">No Internet Connection</h2>
+    <p id="network-modal-msg">You need an active internet connection to log in or sync with the cloud. Guest mode is accessible offline.</p>
+    <div class="modal-actions">
+      <button type="button" id="cancel-network" class="btn-ghost">Cancel</button>
+      <button type="button" id="retry-network" class="btn-primary">Retry</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP SCREEN -->
+<section id="app-screen" class="screen hidden">
+  <!-- PULL TO REFRESH INDICATOR -->
+  <div id="pull-refresh-indicator" class="pull-refresh">
+    <div class="pull-refresh-content">
+      <svg id="pull-refresh-spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/>
+      </svg>
+      <span id="pull-refresh-text">Pull to refresh</span>
+    </div>
+  </div>
+
+  <div id="network-status-banner" class="status-banner hidden offline" role="status" aria-live="polite">
+    <div class="status-banner-content">
+      <svg id="status-icon-offline" class="status-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M15 9l-6 6M9 9l6 6"/>
+      </svg>
+      <svg id="status-icon-online" class="status-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <path d="M20 6L9 17l-5-5"/>
+      </svg>
+      <span id="status-banner-text">Offline — changes saved locally</span>
+    </div>
+  </div>
+  <div id="verify-banner" class="verify-banner hidden">
+    <span>Please verify your email address.</span>
+    <button type="button" id="resend-verify-btn">Resend</button>
+  </div>
+  <header class="topbar">
+    <p class="brand">Budgelist</p>
+    <div class="topbar-actions">
+      <button id="sync-btn" class="icon-btn" aria-label="Sync data">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
+      </button>
+      <button id="theme-toggle" class="icon-btn" aria-label="Toggle dark mode">
+        <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg id="theme-icon-moon" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg>
+      </button>
+      <button id="settings-btn" class="icon-btn" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div id="month-nav" class="month-nav">
+    <button id="prev-month" class="nav-arrow" aria-label="Previous month">&#8249;</button>
+    <div class="month-total-wrap">
+      <p id="month-label" class="month-label">October 2026</p>
+      <h1 id="month-total">$0.00</h1>
+    </div>
+    <button id="next-month" class="nav-arrow" aria-label="Next month">&#8250;</button>
+  </div>
+
+  <div id="budget-bar-wrap" class="budget-bar-wrap hidden">
+    <div class="budget-info">
+      <span id="budget-status-text">Spent $0.00 of $0.00 budget</span>
+      <span id="budget-remaining-text" class="budget-remaining">$0.00 left</span>
+    </div>
+    <div class="budget-progress-track">
+      <div id="budget-progress-fill" class="budget-progress-fill"></div>
+    </div>
+  </div>
+
+  <div id="budget-warning" class="warning hidden">
+    <span id="budget-warning-text"></span>
+  </div>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Forecast</h2>
+      <button id="set-budget-btn" class="link-btn">Set budget</button>
+    </div>
+    <div id="forecast-chart" class="chart-area"></div>
+    <div id="forecast-legend" class="chart-legend hidden">
+      <span class="legend-item"><span class="legend-dot" id="legend-dot-spent"></span>Spent</span>
+      <span class="legend-item"><span class="legend-dot legend-dot-dash" id="legend-dot-projected"></span>Projected</span>
+    </div>
+    <p id="forecast-empty" class="empty hidden">No expenses logged yet — add one to see your forecast.</p>
+    <p id="forecast-note" class="note"></p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>By category</h2>
+      <select id="category-sort" class="mini-select" aria-label="Sort categories">
+        <option value="default">Default</option>
+        <option value="alpha">A–Z</option>
+        <option value="amount">By expense</option>
+      </select>
+    </div>
+    <div class="chart-toggle" role="group" aria-label="Chart type">
+      <button type="button" class="chip-btn active" data-chart="pie">Pie</button>
+      <button type="button" class="chip-btn" data-chart="bar">Bar</button>
+    </div>
+    <div id="category-chart" class="chart-area"></div>
+    <p id="category-chart-empty" class="empty hidden">No expenses yet this month.</p>
+    <div id="category-list" class="category-list"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recurring bills</h2>
+      <button id="add-recurring-btn" class="link-btn">+ Add</button>
+    </div>
+    <ul id="recurring-list" class="recurring-list"></ul>
+    <p id="recurring-empty" class="empty hidden">No recurring bills yet.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Expenses</h2>
+    <ul id="expense-list" class="expense-list"></ul>
+    <p id="empty-state" class="empty hidden">Nothing logged for this month yet.</p>
+  </section>
+</section>
+
+<!-- ADD/EDIT EXPENSE (floating) -->
+<button id="add-btn" class="fab hidden" aria-label="Add expense">+</button>
+
+<!-- ADD/EDIT EXPENSE SHEET -->
+<div id="add-sheet" class="sheet hidden">
+  <div class="sheet-content">
+    <h2 id="expense-sheet-title">Add expense</h2>
+    <form id="expense-form">
+      <label for="amount">Amount</label>
+      <input type="number" id="amount" step="0.01" min="0.01" required />
+
+      <label for="category">Category</label>
+      <select id="category">
+        <option>Food</option>
+        <option>Transport</option>
+        <option>Bills</option>
+        <option>Shopping</option>
+        <option>Health</option>
+        <option>Other</option>
+      </select>
+
+      <label for="note">Note (optional)</label>
+      <input type="text" id="note" maxlength="60" placeholder="e.g. groceries" />
+
+      <div class="sheet-actions">
+        <button type="button" id="delete-expense-btn" class="btn-danger hidden">Delete</button>
+        <button type="button" id="cancel-add" class="btn-ghost">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- RECURRING SHEET -->
+<div id="recurring-sheet" class="sheet hidden">
+  <div class="sheet-content">
+    <h2 id="recurring-sheet-title">Add recurring bill</h2>
+    <form id="recurring-form">
+      <label for="r-amount">Amount</label>
+      <input type="number" id="r-amount" step="0.01" min="0.01" required />
+
+      <label for="r-category">Category</label>
+      <select id="r-category">
+        <option>Bills</option>
+        <option>Food</option>
+        <option>Transport</option>
+        <option>Shopping</option>
+        <option>Health</option>
+        <option>Other</option>
+      </select>
+
+      <label for="r-note">Name</label>
+      <input type="text" id="r-note" maxlength="40" placeholder="e.g. Rent" required />
+
+      <label for="r-day">Day of month charged</label>
+      <input type="number" id="r-day" min="1" max="28" value="1" required />
+
+      <div class="sheet-actions">
+        <button type="button" id="delete-recurring-btn" class="btn-danger hidden">Delete</button>
+        <button type="button" id="cancel-recurring" class="btn-ghost">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- BUDGET SHEET -->
+<div id="budget-sheet" class="sheet hidden">
+  <div class="sheet-content">
+    <h2>Monthly budget</h2>
+    <form id="budget-form">
+      <label for="budget-input">Budget amount</label>
+      <input type="number" id="budget-input" step="1" min="0" required />
+      <div class="sheet-actions">
+        <button type="button" id="cancel-budget" class="btn-ghost">Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- SETTINGS SHEET -->
+<div id="settings-sheet" class="sheet hidden">
+  <div class="sheet-content settings-content">
+    <div class="settings-header">
+      <h2>Settings</h2>
+      <button type="button" id="close-settings-btn" class="icon-btn" aria-label="Close settings">&times;</button>
+    </div>
+
+    <div class="settings-body">
+      <!-- ACCORDION 1: PROFILE -->
+      <div class="accordion-item active">
+        <button type="button" class="accordion-header">
+          <span>Profile</span>
+          <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="accordion-content">
+          <label>Avatar</label>
+          <div id="avatar-presets" class="avatar-presets">
+            <button type="button" class="avatar-chip active" data-avatar="🦊">🦊</button>
+            <button type="button" class="avatar-chip" data-avatar="🐱">🐱</button>
+            <button type="button" class="avatar-chip" data-avatar="🚀">🚀</button>
+            <button type="button" class="avatar-chip" data-avatar="💎">💎</button>
+            <button type="button" class="avatar-chip" data-avatar="👤">👤</button>
+          </div>
+
+          <label for="settings-name">Name</label>
+          <input type="text" id="settings-name" placeholder="Your name" />
+
+          <label for="settings-email">Email bound</label>
+          <input type="email" id="settings-email" readonly class="readonly-input" placeholder="Guest account" />
+
+          <label for="settings-password">Password</label>
+          <div class="password-row">
+            <input type="password" id="settings-password" value="••••••••" readonly class="readonly-input" />
+            <button type="button" id="change-password-btn" class="btn-ghost">Change</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION 2: APPEARANCE -->
+      <div class="accordion-item">
+        <button type="button" class="accordion-header">
+          <span>Appearance</span>
+          <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="accordion-content">
+          <div class="settings-toggle-row">
+            <span>Dark mode</span>
+            <label class="switch">
+              <input type="checkbox" id="settings-dark-toggle" />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION 3: SYNC OPTIONS -->
+      <div class="accordion-item">
+        <button type="button" class="accordion-header">
+          <span>Sync Options</span>
+          <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="accordion-content">
+          <div class="settings-toggle-row">
+            <div>
+              <span class="setting-title">Auto Sync</span>
+              <p class="setting-desc">Sync changes automatically in background</p>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="settings-auto-sync-toggle" checked />
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION 4: EXPORT -->
+      <div class="accordion-item">
+        <button type="button" class="accordion-header">
+          <span>Export</span>
+          <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="accordion-content">
+          <button type="button" id="export-csv-btn" class="btn-ghost style-btn-icon" style="width: 100%;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Export as CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- ACCORDION 5: ABOUT -->
+      <div class="accordion-item">
+        <button type="button" class="accordion-header">
+          <span>About</span>
+          <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="accordion-content">
+          <div class="about-card">
+            <div class="about-brand-row">
+              <span class="brand">Budgelist</span>
+              <span class="version-badge">v1.0.0-beta</span>
+            </div>
+            <p class="about-dev">Developed with ❤️ by <strong>Kuraku & Budgelist Team</strong></p>
+
+            <button type="button" id="check-update-btn" class="btn-ghost style-btn-icon" style="width: 100%; margin: 12px 0 16px;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
+              Check for updates
+            </button>
+
+            <div class="release-notes-wrap">
+              <button type="button" id="toggle-release-notes" class="link-btn" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <span>What's New in v1.0.0-beta</span>
+                <span id="release-notes-arrow">▸</span>
+              </button>
+              <div id="release-notes-content" class="release-notes-list hidden">
+                <ul>
+                  <li><strong>Local-First Offline Mode:</strong> Instant 0ms app open & local mutations.</li>
+                  <li><strong>Cloud Sync & Pull-to-Refresh:</strong> Background & pull down gestures to sync across devices.</li>
+                  <li><strong>Guest Mode:</strong> Instant offline guest access with local storage warning confirmation.</li>
+                  <li><strong>Unique Username Auth:</strong> Signup with unique username & login via email or username.</li>
+                  <li><strong>Realtime Network Banner:</strong> Floating status pill with X mark / Checkmark transition.</li>
+                  <li><strong>Compact Settings:</strong> Collapsible accordion categories, avatar presets & about section.</li>
+                  <li><strong>Native Android Save:</strong> Direct CSV export to Downloads folder.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACCORDION 6: ACCOUNT ACTIONS -->
+      <div class="accordion-item" style="border: none; padding-top: 10px;">
+        <button type="button" id="logout-btn" class="btn-danger style-btn-icon" style="width: 100%;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          Log out
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST NOTIFICATION -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <svg class="toast-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+    <path d="M20 6L9 17l-5-5"/>
+  </svg>
+  <span id="toast-message"></span>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
