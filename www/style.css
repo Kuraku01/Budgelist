@@ -33,7 +33,20 @@
   --warn-ink: #ffb3a3;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+a, button, input, select, textarea {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
+}
+
+a:focus, button:focus, input:focus, select:focus {
+  outline: none;
+  box-shadow: none;
+}
 
 html {
   height: 100%;
@@ -117,8 +130,8 @@ input, select {
 }
 
 input:focus, select:focus {
-  outline: 2px solid var(--primary);
-  outline-offset: 1px;
+  border-color: var(--primary);
+  outline: none;
 }
 
 .auth-actions, .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
@@ -133,6 +146,7 @@ input:focus, select:focus {
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease;
 }
 
 .btn-ghost {
@@ -145,6 +159,7 @@ input:focus, select:focus {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.15s ease, color 0.15s ease;
 }
 
 .btn-danger {
@@ -156,6 +171,11 @@ input:focus, select:focus {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.15s ease;
+}
+
+.btn-primary:active, .btn-ghost:active, .btn-danger:active, .chip-btn:active, .nav-arrow:active, .link-btn:active {
+  transform: scale(0.96);
 }
 
 .error {
@@ -193,6 +213,15 @@ input:focus, select:focus {
   border-radius: 50%;
   color: var(--ink-soft);
   cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+}
+
+.icon-btn:active {
+  transform: scale(0.9);
+}
+
+.icon-btn.spinning svg, .spinning {
+  animation: spin 0.8s linear infinite;
 }
 
 .month-nav {
@@ -433,6 +462,11 @@ input:focus, select:focus {
   box-shadow: 0 8px 20px rgba(108, 76, 241, 0.4);
   cursor: pointer;
   z-index: 15;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+}
+
+.fab:active {
+  transform: scale(0.9) rotate(90deg);
 }
 
 .sheet {
@@ -442,6 +476,14 @@ input:focus, select:focus {
   display: flex;
   align-items: flex-end;
   z-index: 20;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.sheet.hidden {
+  display: flex !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .sheet-content {
@@ -451,6 +493,12 @@ input:focus, select:focus {
   margin: 0 auto;
   border-radius: 20px 20px 0 0;
   padding: 22px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  transform: translateY(0);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sheet.hidden .sheet-content {
+  transform: translateY(100%);
 }
 
 .sheet-content h2 { font-size: 20px; margin-bottom: 4px; }
@@ -517,6 +565,14 @@ input:focus, select:focus {
   justify-content: center;
   z-index: 50;
   padding: 20px;
+  opacity: 1;
+  transition: opacity 0.25s ease;
+}
+
+.modal-overlay.hidden {
+  display: flex !important;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .modal-card {
@@ -527,6 +583,12 @@ input:focus, select:focus {
   width: 100%;
   max-width: 360px;
   box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+  transform: scale(1);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.modal-overlay.hidden .modal-card {
+  transform: scale(0.9);
 }
 
 .modal-card h2 { font-size: 20px; margin-bottom: 10px; }
@@ -616,12 +678,20 @@ input:focus, select:focus {
 }
 
 .accordion-content {
-  display: none;
-  padding: 4px 0 12px;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
 }
 
 .accordion-item.active .accordion-content {
-  display: block;
+  display: grid;
+  grid-template-rows: 1fr;
+  padding: 4px 0 12px;
+}
+
+.accordion-content-inner {
+  overflow: hidden;
 }
 
 /* About Section & Version Badge */

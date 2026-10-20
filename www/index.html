@@ -283,25 +283,27 @@
           <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="accordion-content">
-          <label>Avatar</label>
-          <div id="avatar-presets" class="avatar-presets">
-            <button type="button" class="avatar-chip active" data-avatar="🦊">🦊</button>
-            <button type="button" class="avatar-chip" data-avatar="🐱">🐱</button>
-            <button type="button" class="avatar-chip" data-avatar="🚀">🚀</button>
-            <button type="button" class="avatar-chip" data-avatar="💎">💎</button>
-            <button type="button" class="avatar-chip" data-avatar="👤">👤</button>
-          </div>
+          <div class="accordion-content-inner">
+            <label>Avatar</label>
+            <div id="avatar-presets" class="avatar-presets">
+              <button type="button" class="avatar-chip active" data-avatar="🦊">🦊</button>
+              <button type="button" class="avatar-chip" data-avatar="🐱">🐱</button>
+              <button type="button" class="avatar-chip" data-avatar="🚀">🚀</button>
+              <button type="button" class="avatar-chip" data-avatar="💎">💎</button>
+              <button type="button" class="avatar-chip" data-avatar="👤">👤</button>
+            </div>
 
-          <label for="settings-name">Name</label>
-          <input type="text" id="settings-name" placeholder="Your name" />
+            <label for="settings-name">Name</label>
+            <input type="text" id="settings-name" placeholder="Your name" />
 
-          <label for="settings-email">Email bound</label>
-          <input type="email" id="settings-email" readonly class="readonly-input" placeholder="Guest account" />
+            <label for="settings-email">Email bound</label>
+            <input type="email" id="settings-email" readonly class="readonly-input" placeholder="Guest account" />
 
-          <label for="settings-password">Password</label>
-          <div class="password-row">
-            <input type="password" id="settings-password" value="••••••••" readonly class="readonly-input" />
-            <button type="button" id="change-password-btn" class="btn-ghost">Change</button>
+            <label for="settings-password">Password</label>
+            <div class="password-row">
+              <input type="password" id="settings-password" value="••••••••" readonly class="readonly-input" />
+              <button type="button" id="change-password-btn" class="btn-ghost">Change</button>
+            </div>
           </div>
         </div>
       </div>
@@ -313,12 +315,14 @@
           <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="accordion-content">
-          <div class="settings-toggle-row">
-            <span>Dark mode</span>
-            <label class="switch">
-              <input type="checkbox" id="settings-dark-toggle" />
-              <span class="slider"></span>
-            </label>
+          <div class="accordion-content-inner">
+            <div class="settings-toggle-row">
+              <span>Dark mode</span>
+              <label class="switch">
+                <input type="checkbox" id="settings-dark-toggle" />
+                <span class="slider"></span>
+              </label>
+            </div>
           </div>
         </div>
       </div>
@@ -330,15 +334,17 @@
           <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="accordion-content">
-          <div class="settings-toggle-row">
-            <div>
-              <span class="setting-title">Auto Sync</span>
-              <p class="setting-desc">Sync changes automatically in background</p>
+          <div class="accordion-content-inner">
+            <div class="settings-toggle-row">
+              <div>
+                <span class="setting-title">Auto Sync</span>
+                <p class="setting-desc">Sync changes automatically in background</p>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="settings-auto-sync-toggle" checked />
+                <span class="slider"></span>
+              </label>
             </div>
-            <label class="switch">
-              <input type="checkbox" id="settings-auto-sync-toggle" checked />
-              <span class="slider"></span>
-            </label>
           </div>
         </div>
       </div>
@@ -350,10 +356,12 @@
           <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="accordion-content">
-          <button type="button" id="export-csv-btn" class="btn-ghost style-btn-icon" style="width: 100%;">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
-            Export as CSV
-          </button>
+          <div class="accordion-content-inner">
+            <button type="button" id="export-csv-btn" class="btn-ghost style-btn-icon" style="width: 100%;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              Export as CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -364,33 +372,35 @@
           <svg class="accordion-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
         </button>
         <div class="accordion-content">
-          <div class="about-card">
-            <div class="about-brand-row">
-              <span class="brand">Budgelist</span>
-              <span class="version-badge">v1.0.0-beta</span>
-            </div>
-            <p class="about-dev">Developed with ❤️ by <strong>Kuraku & Budgelist Team</strong></p>
+          <div class="accordion-content-inner">
+            <div class="about-card">
+              <div class="about-brand-row">
+                <span class="brand">Budgelist</span>
+                <span class="version-badge">v1.0.0-beta</span>
+              </div>
+              <p class="about-dev">Developed with ❤️ by <strong>Kuraku & Budgelist Team</strong></p>
 
-            <button type="button" id="check-update-btn" class="btn-ghost style-btn-icon" style="width: 100%; margin: 12px 0 16px;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
-              Check for updates
-            </button>
-
-            <div class="release-notes-wrap">
-              <button type="button" id="toggle-release-notes" class="link-btn" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-                <span>What's New in v1.0.0-beta</span>
-                <span id="release-notes-arrow">▸</span>
+              <button type="button" id="check-update-btn" class="btn-ghost style-btn-icon" style="width: 100%; margin: 12px 0 16px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/></svg>
+                Check for updates
               </button>
-              <div id="release-notes-content" class="release-notes-list hidden">
-                <ul>
-                  <li><strong>Local-First Offline Mode:</strong> Instant 0ms app open & local mutations.</li>
-                  <li><strong>Cloud Sync & Pull-to-Refresh:</strong> Background & pull down gestures to sync across devices.</li>
-                  <li><strong>Guest Mode:</strong> Instant offline guest access with local storage warning confirmation.</li>
-                  <li><strong>Unique Username Auth:</strong> Signup with unique username & login via email or username.</li>
-                  <li><strong>Realtime Network Banner:</strong> Floating status pill with X mark / Checkmark transition.</li>
-                  <li><strong>Compact Settings:</strong> Collapsible accordion categories, avatar presets & about section.</li>
-                  <li><strong>Native Android Save:</strong> Direct CSV export to Downloads folder.</li>
-                </ul>
+
+              <div class="release-notes-wrap">
+                <button type="button" id="toggle-release-notes" class="link-btn" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                  <span>What's New in v1.0.0-beta</span>
+                  <span id="release-notes-arrow">▸</span>
+                </button>
+                <div id="release-notes-content" class="release-notes-list hidden">
+                  <ul>
+                    <li><strong>Local-First Offline Mode:</strong> Instant 0ms app open & local mutations.</li>
+                    <li><strong>Cloud Sync & Pull-to-Refresh:</strong> Background & pull down gestures to sync across devices.</li>
+                    <li><strong>Guest Mode:</strong> Instant offline guest access with local storage warning confirmation.</li>
+                    <li><strong>Unique Username Auth:</strong> Signup with unique username & login via email or username.</li>
+                    <li><strong>Realtime Network Banner:</strong> Floating status pill with X mark / Checkmark transition.</li>
+                    <li><strong>Compact Settings:</strong> Collapsible accordion categories, avatar presets & about section.</li>
+                    <li><strong>Native Android Save:</strong> Direct CSV export to Downloads folder.</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>

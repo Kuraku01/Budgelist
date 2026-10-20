@@ -231,6 +231,8 @@ async function syncCloudData(showToastFeedback = false) {
   }
 
   isSyncing = true;
+  const syncBtn = $("sync-btn");
+  if (syncBtn) syncBtn.classList.add("spinning");
   if (showToastFeedback) showToast("Syncing with cloud...");
 
   try {
@@ -286,6 +288,7 @@ async function syncCloudData(showToastFeedback = false) {
   } catch (e) {
     if (showToastFeedback) showToast("Sync failed. Local data preserved.");
   } finally {
+    if (syncBtn) syncBtn.classList.remove("spinning");
     isSyncing = false;
   }
 }
