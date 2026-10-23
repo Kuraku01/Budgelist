@@ -1089,7 +1089,6 @@ $("email-form").addEventListener("submit", async (e) => {
   safeSet(pendingKey, JSON.stringify({
     oldEmail: user.email.toLowerCase(),
     newEmail: newEmail.toLowerCase(),
-    password: password,
     uid: user.uid,
     timestamp: Date.now()
   }));
