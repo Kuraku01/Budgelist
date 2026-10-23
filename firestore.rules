@@ -3,23 +3,40 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // Usernames collection for unique username lookup and login resolution
     match /usernames/{username} {
-      // Anyone can read to check availability or resolve username to email during login
-      allow read: if true;
-      // Only authenticated users can create their username mapping
-      allow create: if request.auth != null && request.auth.uid == request.resource.data.uid;
-      // Allow update/delete only by the owner
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.uid;
+      // Allow single document lookup to check availability or resolve username during login
+      allow get: if true;
+      // Disallow collection queries to prevent harvesting/enumeration of user emails
+      allow list: if false;
+      // Only authenticated users can create their username mapping matching their credentials
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email;
+      // Allow update/delete only by document owner
+      allow update, delete: if request.auth != null && (
+        (resource.data != null && resource.data.uid == request.auth.uid) ||
+        (request.resource.data != null && request.resource.data.uid == request.auth.uid)
+      );
     }
 
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
 
       match /expenses/{expenseId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0;
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
       match /recurring/{recurringId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0;
+        allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }
   }

@@ -3,7 +3,10 @@ node_modules/
 .gradle/
 build/
 app/build/
+release/
 local.properties
 *.iml
 .DS_Store
 google-services.json
+*.jks
+*.keystore

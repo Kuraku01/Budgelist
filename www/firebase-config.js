@@ -1,7 +1,3 @@
-// Paste the config object from your Firebase project settings
-// (Project settings → General → Your apps → SDK setup and configuration).
-// This file is imported by app.js — no other file needs editing.
-
 export const firebaseConfig = {
   apiKey: "AIzaSyDijnhExv4oKe2goU9CNgw1box3jNBPUk8",
   authDomain: "budgelistapp.firebaseapp.com",
