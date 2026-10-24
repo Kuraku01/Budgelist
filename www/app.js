@@ -76,6 +76,7 @@ function showScreen(screenId) {
     if (loadingScreen) loadingScreen.classList.remove("hidden");
   }
 }
+window.showScreen = showScreen;
 const budgetBtn = $("set-budget-btn"), budgetSheet = $("budget-sheet"), budgetForm = $("budget-form");
 const recurringSheet = $("recurring-sheet"), recurringForm = $("recurring-form");
 let categorySort = safeGet("budgelist-cat-sort") || "default";
@@ -354,9 +355,58 @@ try {
 setTimeout(() => { initCustomSelects(); }, 100);
 
 // ---------- Local Cache & Sync Queue ----------
+const CURRENT_SCHEMA_VERSION = 1;
+
 function cacheKey(key) { return `budgelist-user-${uid || "guest"}-${key}`; }
 
+function runDataSchemaMigrations() {
+  const currentKey = cacheKey("schema-version");
+  const storedVersion = parseInt(safeGet(currentKey) || "0", 10);
+
+  if (storedVersion >= CURRENT_SCHEMA_VERSION) return;
+
+  try {
+    // Migration 0 -> 1: Ensure all expenses and recurring bills have required default properties
+    const rawExpenses = safeGet(cacheKey("expenses"));
+    if (rawExpenses) {
+      let parsedExp = JSON.parse(rawExpenses);
+      if (Array.isArray(parsedExp)) {
+        let modified = false;
+        parsedExp = parsedExp.map((exp) => {
+          if (!exp || typeof exp !== "object") return exp;
+          if (exp.category === undefined) { exp.category = "Other"; modified = true; }
+          if (exp.note === undefined) { exp.note = ""; modified = true; }
+          if (exp.amount === undefined || isNaN(exp.amount)) { exp.amount = 0; modified = true; }
+          return exp;
+        });
+        if (modified) safeSet(cacheKey("expenses"), JSON.stringify(parsedExp));
+      }
+    }
+
+    const rawRecurring = safeGet(cacheKey("recurring"));
+    if (rawRecurring) {
+      let parsedRec = JSON.parse(rawRecurring);
+      if (Array.isArray(parsedRec)) {
+        let modified = false;
+        parsedRec = parsedRec.map((rec) => {
+          if (!rec || typeof rec !== "object") return rec;
+          if (rec.category === undefined) { rec.category = "Other"; modified = true; }
+          if (rec.note === undefined) { rec.note = ""; modified = true; }
+          if (rec.dayOfMonth === undefined) { rec.dayOfMonth = 1; modified = true; }
+          return rec;
+        });
+        if (modified) safeSet(cacheKey("recurring"), JSON.stringify(parsedRec));
+      }
+    }
+
+    safeSet(currentKey, String(CURRENT_SCHEMA_VERSION));
+  } catch (e) {
+    console.error("Schema migration error:", e);
+  }
+}
+
 function loadLocalUserCache() {
+  runDataSchemaMigrations();
   try {
     monthlyBudget = parseFloat(safeGet(cacheKey("budget"))) || 0;
     expenses = JSON.parse(safeGet(cacheKey("expenses"))) || [];
@@ -634,15 +684,15 @@ async function syncCloudData(showToastFeedback = false) {
       for (const item of currentQueue) {
         try {
           if (item.type === "ADD_EXPENSE") {
-            await setDoc(doc(db, "users", uid, "expenses", item.data.id), item.data);
+            await setDoc(doc(db, "users", uid, "expenses", item.data.id), item.data, { merge: true });
           } else if (item.type === "UPDATE_EXPENSE") {
-            await updateDoc(doc(db, "users", uid, "expenses", item.id), item.data);
+            await setDoc(doc(db, "users", uid, "expenses", item.id), item.data, { merge: true });
           } else if (item.type === "DELETE_EXPENSE") {
             await deleteDoc(doc(db, "users", uid, "expenses", item.id));
           } else if (item.type === "ADD_RECURRING") {
-            await setDoc(doc(db, "users", uid, "recurring", item.data.id), item.data);
+            await setDoc(doc(db, "users", uid, "recurring", item.data.id), item.data, { merge: true });
           } else if (item.type === "UPDATE_RECURRING") {
-            await updateDoc(doc(db, "users", uid, "recurring", item.id), item.data);
+            await setDoc(doc(db, "users", uid, "recurring", item.id), item.data, { merge: true });
           } else if (item.type === "DELETE_RECURRING") {
             await deleteDoc(doc(db, "users", uid, "recurring", item.id));
           } else if (item.type === "SET_BUDGET") {
@@ -1089,7 +1139,6 @@ $("email-form").addEventListener("submit", async (e) => {
   safeSet(pendingKey, JSON.stringify({
     oldEmail: user.email.toLowerCase(),
     newEmail: newEmail.toLowerCase(),
-    password: password,
     uid: user.uid,
     timestamp: Date.now()
   }));
@@ -1356,63 +1405,272 @@ document.querySelectorAll(".accordion-header").forEach((header) => {
   });
 });
 
-const APP_VERSION = "0.1.0-beta";
+const APP_VERSION = "0.1.1-beta";
 const GITHUB_REPO = "kuraku01/budgelist";
+let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
+let currentLatestTag = "";
 
 function parseSemver(v) {
-  if (!v) return [0, 0, 0];
-  const cleaned = v.replace(/^v/i, "").replace(/-.*$/, "");
-  return cleaned.split(".").map((n) => parseInt(n, 10) || 0);
+  if (!v) return { numbers: [0, 0, 0], prerelease: "" };
+  const cleaned = v.replace(/^v/i, "").trim();
+  const parts = cleaned.split("-");
+  const numbers = (parts[0] || "").split(".").map((n) => parseInt(n, 10) || 0);
+  const prerelease = parts.slice(1).join("-");
+  return { numbers, prerelease };
 }
 
-function isNewerVersion(latest, current) {
-  const l = parseSemver(latest);
-  const c = parseSemver(current);
-  for (let i = 0; i < Math.max(l.length, c.length); i++) {
-    const numL = l[i] || 0;
-    const numC = c[i] || 0;
+function isNewerVersion(latestTag, currentTag) {
+  const l = parseSemver(latestTag);
+  const c = parseSemver(currentTag);
+
+  for (let i = 0; i < Math.max(l.numbers.length, c.numbers.length); i++) {
+    const numL = l.numbers[i] || 0;
+    const numC = c.numbers[i] || 0;
     if (numL > numC) return true;
     if (numL < numC) return false;
   }
+
+  // Version numbers are identical (e.g., 0.1.0 vs 0.1.0-beta)
+  // A version without a prerelease is newer than a version with a prerelease (0.1.0 > 0.1.0-beta)
+  if (c.prerelease && !l.prerelease) return true;
+  if (l.prerelease && !c.prerelease) return false;
+
+  // Both have prerelease tags (e.g. beta2 vs beta)
+  if (l.prerelease && c.prerelease) {
+    return l.prerelease.localeCompare(c.prerelease, undefined, { numeric: true, sensitivity: "base" }) > 0;
+  }
+
   return false;
 }
 
-$("check-update-btn").addEventListener("click", async () => {
-  showToast("Checking for updates...");
+function isMandatoryUpdate(latestTag, currentVersion, releaseBody = "") {
+  const l = parseSemver(latestTag);
+  const c = parseSemver(currentVersion);
+
+  const latestMajor = l.numbers[0] || 0;
+  const currentMajor = c.numbers[0] || 0;
+  const latestMinor = l.numbers[1] || 0;
+  const currentMinor = c.numbers[1] || 0;
+
+  // Major version bump (e.g. v1.0.0 vs v0.1.0)
+  if (latestMajor > currentMajor) return true;
+
+  // Minor version bump in 0.x series (e.g. v0.1.0 vs v0.0.9)
+  if (currentMajor === 0 && latestMinor > currentMinor) return true;
+
+  // Explicit mandatory or breaking tag/body markers
+  const lowerTag = (latestTag || "").toLowerCase();
+  const lowerBody = (releaseBody || "").toLowerCase();
+  if (lowerTag.includes("breaking") || lowerTag.includes("mandatory")) return true;
+  if (lowerBody.includes("[mandatory]") || lowerBody.includes("[breaking]") || lowerBody.includes("breaking change")) return true;
+
+  return false;
+}
+
+const updateModal = $("update-modal");
+const cancelUpdateBtn = $("cancel-update-btn");
+const downloadUpdateBtn = $("download-update-btn");
+
+if (cancelUpdateBtn) {
+  cancelUpdateBtn.addEventListener("click", () => {
+    if (updateModal) updateModal.classList.add("hidden");
+    if (currentLatestTag) {
+      safeSet("budgelist-skipped-update", currentLatestTag);
+    }
+  });
+}
+
+if (downloadUpdateBtn) {
+  downloadUpdateBtn.addEventListener("click", () => {
+    if (updateModal) updateModal.classList.add("hidden");
+    window.open(updateDownloadUrl, "_blank");
+  });
+}
+
+function showUpdateModal(latestTag, downloadUrl, isForced = false) {
+  currentLatestTag = latestTag;
+  const currentVerEl = $("update-current-version");
+  const latestVerEl = $("update-latest-version");
+  const modalTitle = $("update-modal-title");
+  const modalMsg = $("update-modal-msg");
+
+  if (currentVerEl) currentVerEl.textContent = `v${APP_VERSION.replace(/^v/i, "")}`;
+  if (latestVerEl) latestVerEl.textContent = latestTag.startsWith("v") ? latestTag : `v${latestTag}`;
+  if (downloadUrl) updateDownloadUrl = downloadUrl;
+
+  if (isForced) {
+    if (modalTitle) modalTitle.textContent = "Update Required";
+    if (modalMsg) modalMsg.textContent = "A new version of Budgelist is required to continue. Please download and install the update to proceed.";
+    if (cancelUpdateBtn) cancelUpdateBtn.classList.add("hidden");
+  } else {
+    if (modalTitle) modalTitle.textContent = "Update Available";
+    if (modalMsg) modalMsg.textContent = "A new version of Budgelist is available for download!";
+    if (cancelUpdateBtn) cancelUpdateBtn.classList.remove("hidden");
+  }
+
+  if (updateModal) updateModal.classList.remove("hidden");
+}
+
+async function checkForAppUpdates(isStartup = false, silent = false) {
+  if (!silent) showToast("Checking for updates...");
   const online = await checkNetworkConnection();
   if (!online) {
-    showToast(`Offline. You are on v${APP_VERSION}`);
-    return;
+    if (!silent) showToast(`Offline. You are on v${APP_VERSION}`);
+    return false;
   }
 
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`, {
       headers: { Accept: "application/vnd.github.v3+json" },
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
 
     if (res.ok) {
-      const data = await res.json();
-      const latestTag = (data.tag_name || "").trim();
-      if (latestTag && isNewerVersion(latestTag, APP_VERSION)) {
-        showToast(`Update available: ${latestTag}!`);
-        if (data.html_url) {
-          setTimeout(() => {
-            if (confirm(`A new release (${latestTag}) is available!\n\nWould you like to open the GitHub release page to download it?`)) {
-              window.open(data.html_url, "_system");
-            }
-          }, 400);
+      const releases = await res.json();
+      if (Array.isArray(releases) && releases.length > 0) {
+        const latest = releases[0];
+        const latestTag = (latest.tag_name || "").trim();
+
+        // 1. Check for automated Web ZIP OTA update bundle attached to release
+        checkAndApplyOtaZipBundle(latest);
+
+        if (latestTag && isNewerVersion(latestTag, APP_VERSION)) {
+          const isMandatory = isMandatoryUpdate(latestTag, APP_VERSION, latest.body);
+          const skippedTag = safeGet("budgelist-skipped-update");
+
+          // Skip prompt on startup for optional updates the user chose to skip earlier
+          if (isStartup && !isMandatory && skippedTag === latestTag) {
+            return false;
+          }
+
+          if (!silent) showToast(`Update available: ${latestTag}!`);
+          showUpdateModal(latestTag, latest.html_url || `https://github.com/${GITHUB_REPO}/releases`, isMandatory);
+          return true;
         }
-        return;
       }
     }
-    showToast(`You are on the latest version (v${APP_VERSION})`);
+    if (!silent) showToast(`You are on the latest version (v${APP_VERSION})`);
   } catch (e) {
-    showToast(`You are on version v${APP_VERSION}`);
+    if (!silent) showToast(`You are on version v${APP_VERSION}`);
   }
+  return false;
+}
+
+// ---------- GitHub Release ZIP OTA Live Updates Engine ----------
+let isOtaUpdating = false;
+
+async function checkAndApplyOtaZipBundle(release) {
+  if (isOtaUpdating || !release || !Array.isArray(release.assets)) return false;
+
+  // Find a zip asset attached to release (e.g. dist.zip, bundle.zip, web.zip)
+  const zipAsset = release.assets.find(
+    (a) => a.name && (a.name.endsWith(".zip") || a.name.includes("dist") || a.name.includes("bundle"))
+  );
+  if (!zipAsset || !zipAsset.browser_download_url) return false;
+
+  const latestTag = (release.tag_name || "").trim();
+  const installedBundleTag = safeGet("budgelist-installed-bundle-tag");
+
+  // If already installed or up to date, skip
+  if (installedBundleTag === latestTag) return false;
+  if (!isNewerVersion(latestTag, APP_VERSION)) return false;
+
+  if (typeof JSZip === "undefined") {
+    console.warn("JSZip is not loaded, skipping OTA bundle extraction.");
+    return false;
+  }
+
+  isOtaUpdating = true;
+  console.log(`[OTA] Found web bundle update (${latestTag}), downloading...`);
+
+  const statusText = $("loading-status-text");
+  const progressWrap = $("ota-progress-wrap");
+  const progressBar = $("ota-progress-bar");
+
+  // Ensure loading screen is visible while installing the OTA update
+  showScreen("loading");
+  if (statusText) statusText.textContent = `Downloading update (${latestTag})...`;
+  if (progressWrap) progressWrap.classList.remove("hidden");
+  if (progressBar) progressBar.style.width = "5%";
+
+  try {
+    const res = await fetch(zipAsset.browser_download_url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const contentLength = res.headers.get("content-length");
+    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+    let blob;
+    if (res.body && typeof ReadableStream !== "undefined" && totalBytes > 0) {
+      const reader = res.body.getReader();
+      let receivedBytes = 0;
+      const chunks = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedBytes += value.length;
+        const pct = Math.min(90, Math.round((receivedBytes / totalBytes) * 90));
+        if (statusText) statusText.textContent = `Downloading update: ${pct}%`;
+        if (progressBar) progressBar.style.width = `${pct}%`;
+      }
+      blob = new Blob(chunks);
+    } else {
+      blob = await res.blob();
+      if (progressBar) progressBar.style.width = "70%";
+    }
+
+    if (statusText) statusText.textContent = "Extracting & applying update...";
+    if (progressBar) progressBar.style.width = "90%";
+
+    const zip = await JSZip.loadAsync(blob);
+    const updates = {};
+
+    // Extract updated web assets
+    for (const [filename, fileEntry] of Object.entries(zip.files)) {
+      if (fileEntry.dir) continue;
+      const cleanName = filename.replace(/^.*?public\//, "").replace(/^.*?\//, "");
+      if (cleanName === "app.js" || cleanName === "style.css" || cleanName === "index.html") {
+        const content = await fileEntry.async("string");
+        updates[cleanName] = content;
+      }
+    }
+
+    if (updates["app.js"] || updates["style.css"]) {
+      if (updates["app.js"]) safeSet("budgelist-bundle-app-js", updates["app.js"]);
+      if (updates["style.css"]) safeSet("budgelist-bundle-style-css", updates["style.css"]);
+      safeSet("budgelist-installed-bundle-tag", latestTag);
+
+      if (progressBar) progressBar.style.width = "100%";
+      if (statusText) statusText.textContent = "Update complete! Reloading...";
+      console.log(`[OTA] Web bundle ${latestTag} extracted & applying now.`);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 600);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[OTA] Live update download failed:", err);
+    if (progressWrap) progressWrap.classList.add("hidden");
+    if (statusText) statusText.textContent = "Loading session...";
+  } finally {
+    isOtaUpdating = false;
+  }
+  return false;
+}
+
+// Automatically check for required updates on app launch
+setTimeout(() => {
+  checkForAppUpdates(true, true);
+}, 1200);
+
+$("check-update-btn").addEventListener("click", () => {
+  checkForAppUpdates(false, false);
 });
 
 $("toggle-release-notes").addEventListener("click", () => {
@@ -1422,6 +1680,26 @@ $("toggle-release-notes").addEventListener("click", () => {
   const isHidden = notes.classList.contains("hidden");
   notes.classList.toggle("hidden", !isHidden);
   if (arrow) arrow.textContent = isHidden ? "▾" : "▸";
+});
+
+// ---------- Password Visibility Toggle ----------
+document.querySelectorAll(".password-toggle-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const targetId = btn.getAttribute("data-target");
+    const input = targetId ? $(targetId) : btn.previousElementSibling;
+    if (!input) return;
+
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
+
+    const eyeIcon = btn.querySelector(".eye-icon");
+    const eyeOffIcon = btn.querySelector(".eye-off-icon");
+
+    if (eyeIcon && eyeOffIcon) {
+      eyeIcon.classList.toggle("hidden", isPassword);
+      eyeOffIcon.classList.toggle("hidden", !isPassword);
+    }
+  });
 });
 
 // ---------- Auth Mode & Guest Modal ----------
@@ -2208,14 +2486,17 @@ function renderCategories(monthExpenses) {
 
   $("category-list").innerHTML = entries.map(({ cat, amount }) => {
     const pct = total > 0 ? Math.round((amount / total) * 100) : 0;
+    const safeCat = escapeHtml(cat);
+    const safeAmount = escapeHtml(fmt(amount));
+    const safeColor = escapeHtml(catColor(cat));
     return `
     <div class="category-row">
-      <span class="cat-dot" style="background:${catColor(cat)}"></span>
-      <span class="cat-name">${cat}</span>
+      <span class="cat-dot" style="background:${safeColor}"></span>
+      <span class="cat-name">${safeCat}</span>
       <span class="cat-bar-track">
-        <span class="cat-bar-fill" style="width:${(amount / max) * 100}%;background:${catColor(cat)}"></span>
+        <span class="cat-bar-fill" style="width:${(amount / max) * 100}%;background:${safeColor}"></span>
       </span>
-      <span class="cat-amount">${fmt(amount)}</span>
+      <span class="cat-amount">${safeAmount}</span>
       <span class="cat-percent">${pct}%</span>
     </div>`;
   }).join("");
@@ -2249,14 +2530,15 @@ function svgDonutChart(entries, total) {
   let acc = 0;
   const rings = entries.map((e) => {
     const len = (e.amount / total) * circumference;
-    const ring = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${catColor(e.cat)}"
+    const safeColor = escapeHtml(catColor(e.cat));
+    const ring = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${safeColor}"
       stroke-width="${strokeWidth}" stroke-dasharray="${len} ${circumference - len}"
       stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cy})"></circle>`;
     acc += len;
     return ring;
   }).join("");
   return `<svg viewBox="0 0 ${size} ${size}" width="220" height="${size}" role="img" aria-label="Spending by category, donut chart">
-    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${bg}" stroke-width="${strokeWidth}"></circle>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${escapeHtml(bg)}" stroke-width="${strokeWidth}"></circle>
     ${rings}
   </svg>`;
 }
@@ -2272,53 +2554,94 @@ function svgBarChart(entries) {
     const h = maxVal > 0 ? (e.amount / maxVal) * innerH : 0;
     const x = pad.left + i * (barWidth + gap);
     const y = pad.top + innerH - h;
+    const safeCatText = escapeHtml(e.cat.slice(0, 4));
+    const safeColor = escapeHtml(catColor(e.cat));
     return `
-      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="6" fill="${catColor(e.cat)}"></rect>
-      <text x="${(x + barWidth / 2).toFixed(1)}" y="${height - 10}" font-size="10" fill="${inkSoft}" text-anchor="middle" font-family="Inter, sans-serif">${e.cat.slice(0, 4)}</text>`;
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="6" fill="${safeColor}"></rect>
+      <text x="${(x + barWidth / 2).toFixed(1)}" y="${height - 10}" font-size="10" fill="${escapeHtml(inkSoft)}" text-anchor="middle" font-family="Inter, sans-serif">${safeCatText}</text>`;
   }).join("");
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Spending by category, bar chart">${bars}</svg>`;
 }
 
 function renderExpenseList(monthExpenses) {
   const sorted = [...monthExpenses].sort((a, b) => b.dateISO.localeCompare(a.dateISO) || b.createdAt - a.createdAt);
+  const container = $("expense-list");
   $("empty-state").classList.toggle("hidden", sorted.length > 0);
-  $("expense-list").innerHTML = sorted.map((e) => `
-    <li data-id="${e.id}">
-      <div class="expense-main">
-        <span class="cat-dot-sm" style="background:${catColor(e.category)}"></span>
-        <div class="expense-text">
-          <span class="expense-cat">${escapeHtml(e.category)}${e.recurringId ? " · recurring" : ""}</span>
-          ${e.note ? `<span class="expense-note">${escapeHtml(e.note)}</span>` : ""}
-        </div>
-      </div>
-      <div>
-        <span class="expense-date">${e.dateISO.slice(5)}</span>
-        <span class="expense-amount">${fmt(e.amount)}</span>
-      </div>
-    </li>`).join("");
+  container.innerHTML = "";
 
-  $("expense-list").querySelectorAll("li").forEach((li) => {
+  const fragment = document.createDocumentFragment();
+
+  sorted.forEach((e) => {
+    const li = document.createElement("li");
+    li.dataset.id = e.id;
+
+    const mainDiv = document.createElement("div");
+    mainDiv.className = "expense-main";
+
+    const dot = document.createElement("span");
+    dot.className = "cat-dot-sm";
+    dot.style.background = catColor(e.category);
+
+    const textDiv = document.createElement("div");
+    textDiv.className = "expense-text";
+
+    const catSpan = document.createElement("span");
+    catSpan.className = "expense-cat";
+    catSpan.textContent = e.category + (e.recurringId ? " · recurring" : "");
+
+    textDiv.appendChild(catSpan);
+
+    if (e.note) {
+      const noteSpan = document.createElement("span");
+      noteSpan.className = "expense-note";
+      noteSpan.textContent = e.note;
+      textDiv.appendChild(noteSpan);
+    }
+
+    mainDiv.appendChild(dot);
+    mainDiv.appendChild(textDiv);
+
+    const sideDiv = document.createElement("div");
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "expense-date";
+    dateSpan.textContent = e.dateISO ? e.dateISO.slice(5) : "";
+
+    const amountSpan = document.createElement("span");
+    amountSpan.className = "expense-amount";
+    amountSpan.textContent = fmt(e.amount);
+
+    sideDiv.appendChild(dateSpan);
+    sideDiv.appendChild(amountSpan);
+
+    li.appendChild(mainDiv);
+    li.appendChild(sideDiv);
+
     li.addEventListener("click", () => {
-      const exp = expenses.find((e) => e.id === li.dataset.id);
+      const exp = expenses.find((x) => x.id === e.id);
       if (exp) openExpenseSheet(exp);
     });
+
+    fragment.appendChild(li);
   });
+
+  container.appendChild(fragment);
 }
 
 function renderRecurring() {
   $("recurring-empty").classList.toggle("hidden", recurring.length > 0);
   $("recurring-list").innerHTML = recurring.map((r) => `
-    <li data-id="${r.id}">
+    <li data-id="${escapeHtml(r.id)}">
       <div class="recurring-main">
-        <span class="cat-dot-sm" style="background:${catColor(r.category)}"></span>
+        <span class="cat-dot-sm" style="background:${escapeHtml(catColor(r.category))}"></span>
         <div class="recurring-text">
           <span class="recurring-name">${escapeHtml(r.note)}</span>
-          <span class="recurring-sub">${escapeHtml(r.category)} · day ${r.dayOfMonth}</span>
+          <span class="recurring-sub">${escapeHtml(r.category)} · day ${escapeHtml(r.dayOfMonth)}</span>
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span class="recurring-amount">${fmt(r.amount)}</span>
-        <button class="recurring-delete" data-id="${r.id}" aria-label="Delete">&times;</button>
+        <span class="recurring-amount">${escapeHtml(fmt(r.amount))}</span>
+        <button class="recurring-delete" data-id="${escapeHtml(r.id)}" aria-label="Delete">&times;</button>
       </div>
     </li>`).join("");
 
@@ -2334,9 +2657,13 @@ function renderRecurring() {
 }
 
 function escapeHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
+  if (s == null) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {

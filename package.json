@@ -1,6 +1,6 @@
 {
   "name": "budgelist",
-  "version": "0.1.0-beta",
+  "version": "0.1.1-beta",
   "description": "Log spending, catch recurring bills, and see a trend-line forecast of where you'll land this month against your budget.",
   "main": "app.js",
   "scripts": {

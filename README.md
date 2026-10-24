@@ -1,6 +1,6 @@
 # Budgelist
 
-![Version](https://img.shields.io/badge/version-0.1.0--beta-purple.svg)
+![Version](https://img.shields.io/badge/version-0.1.1--beta-purple.svg)
 ![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Offline Support](https://img.shields.io/badge/offline-100%25%20supported-brightgreen.svg)
@@ -11,6 +11,17 @@ The application allows users to log daily expenses, track recurring bills, conve
 
 ---
 
+## What's New in v0.1.1-beta
+
+- **Seamless In-App Updates**: Get the latest features, improvements, and bug fixes automatically when opening the app.
+- **Update Progress Indicator**: View real-time download percentage and installation progress directly on the startup loading screen when updates are installed.
+- **Flexible Update Notifications**: Critical or major updates present an update required screen, while minor patches offer a "Later" option that respects user preferences.
+- **Password Visibility Toggle**: Easily show or hide passwords on login, signup, and settings screens with a single tap on the eye icon.
+- **Automatic Data Migrations**: Upgraded local storage engine automatically migrates and preserves your saved expenses and recurring bills across updates.
+- **Performance & Security Upgrades**: Smoother list rendering, enhanced data protection, and reinforced Content Security Policy (CSP) authorizations.
+
+---
+
 ## Key Capabilities
 
 ### Local-First Architecture & Offline Performance
@@ -18,6 +29,13 @@ The application allows users to log daily expenses, track recurring bills, conve
 - **Zero-Delay Startup**: Launches instantly from local storage without blocking on network requests or server availability.
 - **Offline Data Persistence**: Add, edit, or delete expenses and recurring bills offline. All mutations persist locally and automatically synchronize when a network connection is established.
 - **Guest Access**: Full application functionality is available offline without requiring account registration.
+- **Automatic Schema Migrations**: Safe, versioned schema migrations maintain local database integrity when data formats change across application versions.
+
+### Over-The-Air (OTA) Live Updates & Update Management
+
+- **Zero-Friction Web OTA Updates**: Background web bundle updater automatically downloads and applies `dist.zip` assets attached to GitHub Releases.
+- **Loading Screen Progress Indicator**: Displays real-time download percentage and extraction progress bar when a new web update is detected on boot.
+- **Mandatory vs. Optional Update Controls**: Differentiates breaking version changes from optional minor patches to ensure API compatibility without unnecessary user friction.
 
 ### Multi-Currency Management & Live Exchange Rates
 
@@ -30,10 +48,11 @@ The application allows users to log daily expenses, track recurring bills, conve
 - **Visual Category Distribution**: Provides inline vector charts (Donut and Bar views) for spending category breakdowns.
 - **Linear Regression Forecast**: Calculates a least-squares trendline across daily cumulative spending to project end-of-month totals against budget limits.
 
-### Privacy & Security
+### Privacy, Security & Code Quality
 
 - **Isolated User Storage**: Data access is restricted to authenticated account owners via server-enforced security policies.
-- **Data Protection Policies**: Configured to prevent unauthorized ADB backup extraction of local WebView storage and enforce encrypted network traffic over HTTPS.
+- **Content Security Policy (CSP)**: Enforces strict resource origin controls for Firebase Auth, Google APIs, WebSocket streams, and GitHub Releases API.
+- **XSS & Credential Protection**: Completely eliminates `innerHTML` sinks in dynamic list rendering and prevents raw password persistence in local storage.
 
 ### Native Android Features
 
@@ -64,7 +83,7 @@ To build and run Budgelist locally:
    - Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/).
    - Enable **Authentication** (Email/Password provider).
    - Enable **Cloud Firestore** and deploy the rules defined in `firestore.rules`.
-   - Copy `www/firebase-config.example.js` to `www/firebase-config.js` and populate your Web API credentials.
+   - Copy `android/app/src/main/assets/public/firebase-config.example.js` to `firebase-config.js` and populate your Web API credentials.
    - Place your Android `google-services.json` inside `android/app/google-services.json` (see `android/app/google-services.json.example`).
 
 3. **Build Android App**:

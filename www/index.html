@@ -8,8 +8,9 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' data: gap: https://ssl.gstatic.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://*.firebaseio.com https://*.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://api.exchangerate-api.com https://api.github.com;"
+      content="default-src 'self' data: gap: https://ssl.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.googleapis.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https://*.firebaseapp.com https://*.firebaseio.com https://apis.google.com; worker-src 'self' blob:;"
     />
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
     <title>Budgelist</title>
     <script>
       // Apply saved theme before paint to avoid a flash of the wrong theme.
@@ -17,13 +18,24 @@
         var t = localStorage.getItem("budgelist-theme");
         if (t) document.documentElement.setAttribute("data-theme", t);
       } catch (e) {}
+
+      // Apply live OTA CSS bundle override if present
+      try {
+        var otaCss = localStorage.getItem("budgelist-bundle-style-css");
+        if (otaCss) {
+          var styleEl = document.createElement("style");
+          styleEl.id = "ota-live-styles";
+          styleEl.textContent = otaCss;
+          document.head.appendChild(styleEl);
+        }
+      } catch (e) {}
     </script>
     <link
-      rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="style.css" />
+    <script src="lib/jszip.min.js"></script>
   </head>
   <body>
     <!-- LOADING SCREEN -->
@@ -48,6 +60,9 @@
         <h1 class="brand loading-brand">Budgelist</h1>
         <div class="loading-spinner"></div>
         <p id="loading-status-text" class="loading-status">Loading session...</p>
+        <div id="ota-progress-wrap" class="ota-progress-wrap hidden">
+          <div id="ota-progress-bar" class="ota-progress-bar" style="width: 0%;"></div>
+        </div>
       </div>
     </section>
 
@@ -76,13 +91,50 @@
           <input type="text" id="auth-id" required autocomplete="username" />
 
           <label for="password">Password</label>
-          <input
-            type="password"
-            id="password"
-            required
-            autocomplete="current-password"
-            minlength="6"
-          />
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="password"
+              required
+              autocomplete="current-password"
+              minlength="6"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
 
           <p id="auth-error" class="error"></p>
           <div class="auth-actions">
@@ -150,6 +202,52 @@
           </button>
           <button type="button" id="retry-network" class="btn-primary">
             Retry
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPDATE AVAILABLE MODAL -->
+    <div
+      id="update-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2 id="update-modal-title">Update Available</h2>
+        <p id="update-modal-msg">A new version of Budgelist is available for download!</p>
+        <div class="update-version-info">
+          <div class="version-badge-wrap">
+            <span class="version-label">Current</span>
+            <span id="update-current-version" class="version-val">v0.1.1-beta</span>
+          </div>
+          <div class="version-arrow">→</div>
+          <div class="version-badge-wrap">
+            <span class="version-label">Latest</span>
+            <span id="update-latest-version" class="version-val highlight">v0.2.0</span>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancel-update-btn" class="btn-ghost" style="flex: 1;">
+            Later
+          </button>
+          <button type="button" id="download-update-btn" class="btn-primary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+            Download
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
           </button>
         </div>
       </div>
@@ -746,7 +844,7 @@
                 <div class="about-card">
                   <div class="about-brand-row">
                     <span class="brand">Budgelist</span>
-                    <span class="version-badge">v0.1.0-beta</span>
+                    <span class="version-badge">v0.1.1-beta</span>
                   </div>
                   <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
 
@@ -783,42 +881,51 @@
                         width: 100%;
                       "
                     >
-                      <span>What's New in v0.1.0-beta</span>
+                      <span>What's New in v0.1.1-beta</span>
                       <span id="release-notes-arrow">▸</span>
                     </button>
                     <div
                       id="release-notes-content"
                       class="release-notes-list hidden"
                     >
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.1.1-beta</h4>
                       <ul>
                         <li>
-                          <strong>Local-First Offline Mode:</strong> Instant 0ms
-                          app open & local mutations.
+                          <strong>Seamless In-App Updates:</strong> Get the latest features and bug fixes automatically when opening the app.
                         </li>
                         <li>
-                          <strong>Cloud Sync & Pull-to-Refresh:</strong>
-                          Background & pull down gestures to sync across
-                          devices.
+                          <strong>Update Progress Indicator:</strong> See real-time download and installation progress directly on the startup screen.
                         </li>
                         <li>
-                          <strong>Guest Mode:</strong> Instant offline guest
-                          access with local storage warning confirmation.
+                          <strong>Password Toggle:</strong> Tap the eye icon on password fields to view or hide what you type.
                         </li>
                         <li>
-                          <strong>Unique Username Auth:</strong> Signup with
-                          unique username & login via email or username.
+                          <strong>Performance & Security Improvements:</strong> Enhanced stability, smoother list rendering, and upgraded data protection.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.0-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Local-First Offline Mode:</strong> Instant 0ms app open & local expense logging.
                         </li>
                         <li>
-                          <strong>Realtime Network Banner:</strong> Floating
-                          status pill with X mark / Checkmark transition.
+                          <strong>Cloud Sync & Pull-to-Refresh:</strong> Background and pull-down gestures to sync across devices.
                         </li>
                         <li>
-                          <strong>Compact Settings:</strong> Collapsible
-                          accordion categories, avatar presets & about section.
+                          <strong>Guest Mode:</strong> Instant offline guest access without registration.
                         </li>
                         <li>
-                          <strong>Native Android Save:</strong> Direct CSV
-                          export to Downloads folder.
+                          <strong>Username & Email Auth:</strong> Sign up with a unique username and log in via email or username.
+                        </li>
+                        <li>
+                          <strong>Realtime Network Status:</strong> Floating network status pill indicating connection state.
+                        </li>
+                        <li>
+                          <strong>Compact Settings:</strong> Collapsible categories, avatar presets, and about section.
+                        </li>
+                        <li>
+                          <strong>CSV Export:</strong> Direct CSV export to your Downloads folder.
                         </li>
                       </ul>
                     </div>
@@ -866,20 +973,94 @@
         <h2>Change password</h2>
         <form id="password-form">
           <label for="old-password">Current password</label>
-          <input
-            type="password"
-            id="old-password"
-            required
-            autocomplete="current-password"
-          />
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="old-password"
+              required
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="old-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
           <label for="new-password">New password (6+ chars)</label>
-          <input
-            type="password"
-            id="new-password"
-            required
-            minlength="6"
-            autocomplete="new-password"
-          />
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="new-password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="new-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
           <p id="password-error" class="error"></p>
           <div style="margin-top: 6px; margin-bottom: 12px">
             <button type="button" id="forgot-password-link" class="link-btn">
@@ -909,7 +1090,44 @@
           <label for="new-email">New email address</label>
           <input type="email" id="new-email" required autocomplete="email" />
           <label for="email-password">Current password (required)</label>
-          <input type="password" id="email-password" required autocomplete="current-password" />
+          <div class="password-input-wrap">
+            <input type="password" id="email-password" required autocomplete="current-password" />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="email-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
           <p id="email-error" class="error"></p>
           <div class="modal-actions">
             <button type="button" id="cancel-email" class="btn-ghost">
@@ -1079,6 +1297,28 @@
       <span id="toast-message"></span>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <script>
+      try {
+        var cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
+        if (cachedAppJs) {
+          var blob = new Blob([cachedAppJs], { type: "application/javascript" });
+          var blobUrl = URL.createObjectURL(blob);
+          var script = document.createElement("script");
+          script.type = "module";
+          script.src = blobUrl;
+          document.body.appendChild(script);
+        } else {
+          var script = document.createElement("script");
+          script.type = "module";
+          script.src = "app.js";
+          document.body.appendChild(script);
+        }
+      } catch (e) {
+        var script = document.createElement("script");
+        script.type = "module";
+        script.src = "app.js";
+        document.body.appendChild(script);
+      }
+    </script>
   </body>
 </html>

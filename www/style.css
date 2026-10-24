@@ -157,6 +157,23 @@ h1, h2, .brand {
   margin: 0;
 }
 
+.ota-progress-wrap {
+  width: 100%;
+  height: 6px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+
+.ota-progress-bar {
+  height: 100%;
+  background: var(--primary);
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
 /* ---------- Auth screen ---------- */
 #auth-screen {
   flex: 1;
@@ -209,6 +226,43 @@ input:focus {
   border-color: var(--primary);
   outline: none;
   box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.18);
+}
+
+.password-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-input-wrap input {
+  padding-right: 44px;
+}
+
+.password-toggle-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  padding: 6px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.2s ease, background-color 0.2s ease;
+}
+
+.password-toggle-btn:hover {
+  color: var(--ink);
+  background-color: var(--bg);
+}
+
+.password-toggle-btn:focus {
+  outline: none;
+  color: var(--primary);
 }
 
 select {
@@ -702,6 +756,48 @@ select:focus {
 .modal-card h2 { font-size: 20px; margin-bottom: 10px; }
 .modal-card p { color: var(--ink-soft); font-size: 14px; line-height: 1.5; margin-bottom: 20px; }
 .modal-actions { display: flex; gap: 10px; }
+
+/* Update Modal Version Info */
+.update-version-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+}
+
+.version-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.version-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.version-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.version-val.highlight {
+  color: var(--primary);
+}
+
+.version-arrow {
+  font-size: 18px;
+  color: var(--ink-soft);
+  font-weight: bold;
+}
 
 .verify-banner {
   background: var(--warn-bg);

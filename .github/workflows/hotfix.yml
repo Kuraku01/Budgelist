@@ -22,8 +22,8 @@ jobs:
 
       - name: Package Web Assets Bundle (dist.zip)
         run: |
-          cd android/app/src/main/assets/public
-          zip -r ../../../../../dist.zip app.js style.css index.html firebase-config.js lib/
+          cd www
+          zip -r ../dist.zip app.js style.css index.html firebase-config.js lib/
 
       - name: Find Release APK (If Present)
         id: find_apk
@@ -37,7 +37,7 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0-beta' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.1-beta' }}
           files: |
             dist.zip
             ${{ steps.find_apk.outputs.apk_exists == 'true' && 'android/app/release/app-release.apk' || '' }}
