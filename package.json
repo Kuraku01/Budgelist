@@ -1,0 +1,16 @@
+{
+  "name": "budgelist",
+  "version": "0.1.0-beta",
+  "description": "Log spending, catch recurring bills, and see a trend-line forecast of where you'll land this month against your budget.",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "type": "module",
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  }
+}

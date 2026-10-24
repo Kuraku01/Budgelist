@@ -1,0 +1,47 @@
+name: Automated Release & Hotfix OTA Pipeline
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish OTA Live Bundle
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Package Web Assets Bundle (dist.zip)
+        run: |
+          cd android/app/src/main/assets/public
+          zip -r ../../../../../dist.zip app.js style.css index.html firebase-config.js lib/
+
+      - name: Find Release APK (If Present)
+        id: find_apk
+        run: |
+          if [ -f "android/app/release/app-release.apk" ]; then
+            echo "apk_exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "apk_exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.0-beta' }}
+          files: |
+            dist.zip
+            ${{ steps.find_apk.outputs.apk_exists == 'true' && 'android/app/release/app-release.apk' || '' }}
+          generate_release_notes: true
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

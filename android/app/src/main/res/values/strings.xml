@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Budgelist</string>
+    <string name="title_activity_main">Budgelist</string>
+    <string name="package_name">com.kuraku.budgelist</string>
+    <string name="custom_url_scheme">com.kuraku.budgelist</string>
+</resources>
