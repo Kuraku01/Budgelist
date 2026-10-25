@@ -66,6 +66,7 @@ jobs:
           overwrite: true
           files: |
             dist.zip
+            ${{ steps.find_apk.outputs.apk_exists == 'true' && steps.find_apk.outputs.apk_path || '' }}
           generate_release_notes: true
           prerelease: true
         env:

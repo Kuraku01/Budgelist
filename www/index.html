@@ -1307,14 +1307,23 @@
     </div>
 
     <script>
+      // Emergency recovery fallback if a cached bundle fails on boot
+      window.addEventListener("error", function (e) {
+        if (localStorage.getItem("budgelist-bundle-app-js")) {
+          console.error("[OTA] Falling back to native bundle due to boot error:", e);
+          localStorage.removeItem("budgelist-bundle-app-js");
+          localStorage.removeItem("budgelist-bundle-style-css");
+          localStorage.removeItem("budgelist-installed-bundle-key");
+          window.location.reload();
+        }
+      });
+
       try {
         var cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
         if (cachedAppJs) {
-          var blob = new Blob([cachedAppJs], { type: "application/javascript" });
-          var blobUrl = URL.createObjectURL(blob);
           var script = document.createElement("script");
           script.type = "module";
-          script.src = blobUrl;
+          script.textContent = cachedAppJs;
           document.body.appendChild(script);
         } else {
           var script = document.createElement("script");
