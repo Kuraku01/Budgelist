@@ -1,55 +1,32 @@
-let firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
-    signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
-    sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
-    updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
-    setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
-    collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch;
-
-if (window.__BUDGELIST_FIREBASE__) {
-  ({
-    firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
-    signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
-    sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
-    updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
-    setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
-    collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
-  } = window.__BUDGELIST_FIREBASE__);
-} else {
-  const candidateOrigins = [
-    window.location.origin,
-    "https://localhost",
-    "http://localhost",
-    "capacitor://localhost"
-  ].filter((v, i, a) => v && v !== "null" && a.indexOf(v) === i);
-
-  for (const baseOrg of candidateOrigins) {
-    try {
-      const configMod = await import(`${baseOrg}/firebase-config.js`);
-      const appMod = await import(`${baseOrg}/lib/firebase/firebase-app.js`);
-      const authMod = await import(`${baseOrg}/lib/firebase/firebase-auth.js`);
-      const firestoreMod = await import(`${baseOrg}/lib/firebase/firebase-firestore.js`);
-
-      firebaseConfig = configMod.firebaseConfig;
-      initializeApp = appMod.initializeApp;
-
-      ({
-        getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-        signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,
-        EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
-        setPersistence, browserLocalPersistence
-      } = authMod);
-
-      ({
-        getFirestore, doc, getDoc, setDoc, collection, addDoc, updateDoc,
-        deleteDoc, getDocs, query, orderBy, writeBatch
-      } = firestoreMod);
-
-      break;
-    } catch (e) {
-      console.warn(`[OTA] Legacy import fallback failed for ${baseOrg}:`, e);
-    }
-  }
-}
+const firebaseConfig = window.firebaseConfig || {};
+const initializeApp = window.initializeApp || (() => ({}));
+const getAuth = window.getAuth || (() => ({}));
+const createUserWithEmailAndPassword = window.createUserWithEmailAndPassword;
+const signInWithEmailAndPassword = window.signInWithEmailAndPassword;
+const signOut = window.signOut;
+const onAuthStateChanged = window.onAuthStateChanged || (() => {});
+const sendEmailVerification = window.sendEmailVerification;
+const sendPasswordResetEmail = window.sendPasswordResetEmail;
+const EmailAuthProvider = window.EmailAuthProvider;
+const reauthenticateWithCredential = window.reauthenticateWithCredential;
+const updatePassword = window.updatePassword;
+const verifyBeforeUpdateEmail = window.verifyBeforeUpdateEmail;
+const updateProfile = window.updateProfile;
+const updateEmail = window.updateEmail;
+const setPersistence = window.setPersistence;
+const browserLocalPersistence = window.browserLocalPersistence;
+const getFirestore = window.getFirestore || (() => ({}));
+const doc = window.doc;
+const getDoc = window.getDoc;
+const setDoc = window.setDoc;
+const collection = window.collection;
+const addDoc = window.addDoc;
+const updateDoc = window.updateDoc;
+const deleteDoc = window.deleteDoc;
+const getDocs = window.getDocs;
+const query = window.query;
+const orderBy = window.orderBy;
+const writeBatch = window.writeBatch;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

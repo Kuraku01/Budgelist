@@ -44,14 +44,35 @@
         deleteDoc, getDocs, query, orderBy, writeBatch,
       } from "./lib/firebase/firebase-firestore.js";
 
-      window.__BUDGELIST_FIREBASE__ = {
-        firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
-        signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
-        sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
-        updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
-        setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
-        collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
-      };
+      window.firebaseConfig = firebaseConfig;
+      window.initializeApp = initializeApp;
+      window.getAuth = getAuth;
+      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+      window.signOut = signOut;
+      window.onAuthStateChanged = onAuthStateChanged;
+      window.sendEmailVerification = sendEmailVerification;
+      window.sendPasswordResetEmail = sendPasswordResetEmail;
+      window.EmailAuthProvider = EmailAuthProvider;
+      window.reauthenticateWithCredential = reauthenticateWithCredential;
+      window.updatePassword = updatePassword;
+      window.verifyBeforeUpdateEmail = verifyBeforeUpdateEmail;
+      window.updateProfile = updateProfile;
+      window.updateEmail = updateEmail;
+      window.setPersistence = setPersistence;
+      window.browserLocalPersistence = browserLocalPersistence;
+      window.getFirestore = getFirestore;
+      window.doc = doc;
+      window.getDoc = getDoc;
+      window.setDoc = setDoc;
+      window.collection = collection;
+      window.addDoc = addDoc;
+      window.updateDoc = updateDoc;
+      window.deleteDoc = deleteDoc;
+      window.getDocs = getDocs;
+      window.query = query;
+      window.orderBy = orderBy;
+      window.writeBatch = writeBatch;
     </script>
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
@@ -1332,7 +1353,7 @@
     <script>
       (async function boot() {
         var checks = 0;
-        while (!window.__BUDGELIST_FIREBASE__ && checks < 50) {
+        while (!window.initializeApp && checks < 50) {
           await new Promise(function (resolve) { setTimeout(resolve, 20); });
           checks++;
         }
