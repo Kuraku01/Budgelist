@@ -30,6 +30,29 @@
         }
       } catch (e) {}
     </script>
+    <script type="module">
+      import { firebaseConfig } from "./firebase-config.js";
+      import { initializeApp } from "./lib/firebase/firebase-app.js";
+      import {
+        getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+        signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,
+        EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+        setPersistence, browserLocalPersistence,
+      } from "./lib/firebase/firebase-auth.js";
+      import {
+        getFirestore, doc, getDoc, setDoc, collection, addDoc, updateDoc,
+        deleteDoc, getDocs, query, orderBy, writeBatch,
+      } from "./lib/firebase/firebase-firestore.js";
+
+      window.__BUDGELIST_FIREBASE__ = {
+        firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
+        signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
+        sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
+        updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+        setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
+        collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+      };
+    </script>
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
@@ -1306,8 +1329,14 @@
       <span id="toast-message"></span>
     </div>
 
-    <script type="module">
+    <script>
       (async function boot() {
+        var checks = 0;
+        while (!window.__BUDGELIST_FIREBASE__ && checks < 50) {
+          await new Promise(function (resolve) { setTimeout(resolve, 20); });
+          checks++;
+        }
+
         var cachedAppJs = null;
         try {
           cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
@@ -1315,11 +1344,11 @@
 
         if (cachedAppJs) {
           try {
-            var dataUri = "data:text/javascript;charset=utf-8," + encodeURIComponent(cachedAppJs);
-            await import(dataUri);
+            var runner = new Function(cachedAppJs);
+            runner();
             return;
           } catch (err) {
-            console.error("[OTA] Data URI import failed, clearing cache and falling back to native app.js:", err);
+            console.error("[OTA] Cached bundle execution failed, falling back to native app.js:", err);
             try {
               localStorage.removeItem("budgelist-bundle-app-js");
               localStorage.removeItem("budgelist-bundle-style-css");
@@ -1328,12 +1357,11 @@
           }
         }
 
-        // Fallback to native app.js from disk
-        try {
-          await import("./app.js");
-        } catch (err) {
-          console.error("[OTA] Native app.js import failed:", err);
-        }
+        // Fallback to native app.js script from disk
+        var script = document.createElement("script");
+        script.type = "module";
+        script.src = "app.js";
+        document.body.appendChild(script);
       })();
     </script>
   </body>

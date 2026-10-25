@@ -1,15 +1,11 @@
-import { firebaseConfig } from "/firebase-config.js";
-import { initializeApp } from "/lib/firebase/firebase-app.js";
-import {
-  getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,
-  EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
-  setPersistence, browserLocalPersistence,
-} from "/lib/firebase/firebase-auth.js";
-import {
-  getFirestore, doc, getDoc, setDoc, collection, addDoc, updateDoc,
-  deleteDoc, getDocs, query, orderBy, writeBatch,
-} from "/lib/firebase/firebase-firestore.js";
+const {
+  firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
+  sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
+  updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+  setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
+  collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+} = window.__BUDGELIST_FIREBASE__ || {};
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
