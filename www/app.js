@@ -1710,12 +1710,14 @@ const mainAuthBtn = $("main-auth-btn");
 const toggleAuthModeBtn = $("toggle-auth-mode-btn");
 const authTitle = $("auth-title");
 const authSub = $("auth-sub");
+const loginForgotPasswordBtn = $("login-forgot-password-btn");
 
 function setAuthMode(mode) {
   authMode = mode;
   authError.textContent = "";
   if (mode === "login") {
     usernameFieldWrap.classList.add("hidden");
+    if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.remove("hidden");
     authIdLabel.textContent = "Email or Username";
     $("auth-id").placeholder = "";
     mainAuthBtn.textContent = "Log in";
@@ -1724,6 +1726,7 @@ function setAuthMode(mode) {
     authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
   } else {
     usernameFieldWrap.classList.remove("hidden");
+    if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.add("hidden");
     authIdLabel.textContent = "Email";
     $("auth-id").placeholder = "you@example.com";
     mainAuthBtn.textContent = "Create account";
@@ -1971,6 +1974,50 @@ authForm.addEventListener("submit", async (e) => {
     }
   }
 });
+
+if (loginForgotPasswordBtn) {
+  loginForgotPasswordBtn.addEventListener("click", async () => {
+    authError.textContent = "";
+
+    const online = await checkNetworkConnection();
+    if (!online) {
+      showNetworkModal(
+        "You need an active internet connection to reset your password.",
+        () => loginForgotPasswordBtn.click(),
+        () => { authError.textContent = "Offline. Connect to the internet to reset password."; }
+      );
+      return;
+    }
+
+    const identifier = $("auth-id").value.trim();
+    if (!identifier) {
+      authError.textContent = "Enter your email or username above first.";
+      return;
+    }
+
+    try {
+      let email = identifier;
+      if (!identifier.includes("@")) {
+        const usernameLower = identifier.toLowerCase();
+        const uSnap = await getDoc(doc(db, "usernames", usernameLower));
+        if (!uSnap.exists()) {
+          authError.textContent = "No account found with that username.";
+          return;
+        }
+        email = uSnap.data().email;
+      }
+      if (!email) {
+        authError.textContent = "No email found for this account.";
+        return;
+      }
+      await sendPasswordResetEmail(auth, email);
+      showToast(`Password reset email sent to ${email}`);
+      authError.textContent = "";
+    } catch (err) {
+      authError.textContent = humanAuthError(err.code) || "Could not send password reset email.";
+    }
+  });
+}
 
 function handleLogout() {
   closeSettingsSheet();

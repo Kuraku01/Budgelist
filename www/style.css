@@ -210,6 +210,17 @@ label {
   margin: 14px 0 6px;
 }
 
+.auth-password-label-wrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 14px 0 6px;
+}
+
+.auth-password-label-wrap label {
+  margin: 0;
+}
+
 input {
   width: 100%;
   padding: 12px 14px;
