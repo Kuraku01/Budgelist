@@ -1443,6 +1443,15 @@ function isNewerVersion(latestTag, currentTag) {
   return false;
 }
 
+function isSameOrNewerVersion(latestTag, currentTag) {
+  if (isNewerVersion(latestTag, currentTag)) return true;
+  const l = parseSemver(latestTag);
+  const c = parseSemver(currentTag);
+  const sameNumbers = l.numbers.join(".") === c.numbers.join(".");
+  const samePrerelease = (l.prerelease || "") === (c.prerelease || "");
+  return sameNumbers && samePrerelease;
+}
+
 function isMandatoryUpdate(latestTag, currentVersion, releaseBody = "") {
   const l = parseSemver(latestTag);
   const c = parseSemver(currentVersion);
@@ -1535,7 +1544,8 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
         const latestTag = (latest.tag_name || "").trim();
 
         // 1. Check for automated Web ZIP OTA update bundle attached to release
-        checkAndApplyOtaZipBundle(latest);
+        const otaApplied = await checkAndApplyOtaZipBundle(latest);
+        if (otaApplied) return true;
 
         if (latestTag && isNewerVersion(latestTag, APP_VERSION)) {
           const isMandatory = isMandatoryUpdate(latestTag, APP_VERSION, latest.body);
@@ -1572,11 +1582,14 @@ async function checkAndApplyOtaZipBundle(release) {
   if (!zipAsset || !zipAsset.browser_download_url) return false;
 
   const latestTag = (release.tag_name || "").trim();
-  const installedBundleTag = safeGet("budgelist-installed-bundle-tag");
+  const bundleKey = `${latestTag}_${zipAsset.updated_at || zipAsset.id || zipAsset.size}`;
+  const installedBundleKey = safeGet("budgelist-installed-bundle-key");
 
-  // If already installed or up to date, skip
-  if (installedBundleTag === latestTag) return false;
-  if (!isNewerVersion(latestTag, APP_VERSION)) return false;
+  // If this exact bundle is already installed, skip
+  if (installedBundleKey === bundleKey) return false;
+
+  // Ensure release is compatible (same or newer version than base app)
+  if (!isSameOrNewerVersion(latestTag, APP_VERSION)) return false;
 
   if (typeof JSZip === "undefined") {
     console.warn("JSZip is not loaded, skipping OTA bundle extraction.");
@@ -1643,6 +1656,7 @@ async function checkAndApplyOtaZipBundle(release) {
     if (updates["app.js"] || updates["style.css"]) {
       if (updates["app.js"]) safeSet("budgelist-bundle-app-js", updates["app.js"]);
       if (updates["style.css"]) safeSet("budgelist-bundle-style-css", updates["style.css"]);
+      safeSet("budgelist-installed-bundle-key", bundleKey);
       safeSet("budgelist-installed-bundle-tag", latestTag);
 
       if (progressBar) progressBar.style.width = "100%";
