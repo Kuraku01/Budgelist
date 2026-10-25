@@ -8,7 +8,7 @@
     />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self' data: gap: https://ssl.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.googleapis.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https://*.firebaseapp.com https://*.firebaseio.com https://apis.google.com; worker-src 'self' blob:;"
+      content="default-src 'self' data: gap: https://ssl.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://apis.google.com https://*.googleapis.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https://*.firebaseapp.com https://*.firebaseio.com https://apis.google.com; worker-src 'self' blob:;"
     />
     <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
     <title>Budgelist</title>
@@ -1306,37 +1306,35 @@
       <span id="toast-message"></span>
     </div>
 
-    <script>
-      // Emergency recovery fallback if a cached bundle fails on boot
-      window.addEventListener("error", function (e) {
-        if (localStorage.getItem("budgelist-bundle-app-js")) {
-          console.error("[OTA] Falling back to native bundle due to boot error:", e);
-          localStorage.removeItem("budgelist-bundle-app-js");
-          localStorage.removeItem("budgelist-bundle-style-css");
-          localStorage.removeItem("budgelist-installed-bundle-key");
-          window.location.reload();
-        }
-      });
+    <script type="module">
+      (async function boot() {
+        var cachedAppJs = null;
+        try {
+          cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
+        } catch (e) {}
 
-      try {
-        var cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
         if (cachedAppJs) {
-          var script = document.createElement("script");
-          script.type = "module";
-          script.textContent = cachedAppJs;
-          document.body.appendChild(script);
-        } else {
-          var script = document.createElement("script");
-          script.type = "module";
-          script.src = "app.js";
-          document.body.appendChild(script);
+          try {
+            var dataUri = "data:text/javascript;charset=utf-8," + encodeURIComponent(cachedAppJs);
+            await import(dataUri);
+            return;
+          } catch (err) {
+            console.error("[OTA] Data URI import failed, clearing cache and falling back to native app.js:", err);
+            try {
+              localStorage.removeItem("budgelist-bundle-app-js");
+              localStorage.removeItem("budgelist-bundle-style-css");
+              localStorage.removeItem("budgelist-installed-bundle-key");
+            } catch (e) {}
+          }
         }
-      } catch (e) {
-        var script = document.createElement("script");
-        script.type = "module";
-        script.src = "app.js";
-        document.body.appendChild(script);
-      }
+
+        // Fallback to native app.js from disk
+        try {
+          await import("./app.js");
+        } catch (err) {
+          console.error("[OTA] Native app.js import failed:", err);
+        }
+      })();
     </script>
   </body>
 </html>

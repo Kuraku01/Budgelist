@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   release:
-    name: Build & Publish OTA Live Bundle and APK
+    name: Build & Publish OTA Live Bundle
     runs-on: ubuntu-latest
 
     steps:
@@ -31,33 +31,10 @@ jobs:
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Setup Java JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
       - name: Package Web Assets Bundle (dist.zip)
         run: |
           cd www
           zip -r ../dist.zip app.js style.css index.html firebase-config.js lib/
-
-      - name: Build Android Release APK
-        run: |
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleRelease --stacktrace || ./gradlew assembleDebug --stacktrace
-
-      - name: Locate Generated APK
-        id: find_apk
-        run: |
-          APK_PATH=$(find android/app/build/outputs/apk/ -name "*.apk" | head -n 1)
-          if [ -n "$APK_PATH" ]; then
-            echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
-            echo "apk_exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "apk_exists=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -66,7 +43,6 @@ jobs:
           overwrite: true
           files: |
             dist.zip
-            ${{ steps.find_apk.outputs.apk_exists == 'true' && steps.find_apk.outputs.apk_path || '' }}
           generate_release_notes: true
           prerelease: true
         env:
