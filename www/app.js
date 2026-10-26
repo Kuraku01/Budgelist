@@ -855,6 +855,16 @@ function updateProfileWidgetUI() {
   if ($("profile-widget-avatar")) $("profile-widget-avatar").textContent = av;
   if ($("profile-widget-name")) $("profile-widget-name").textContent = name;
   if ($("settings-avatar-preview")) $("settings-avatar-preview").textContent = av;
+
+  // Hide sync button and sync settings for Guest mode
+  const syncBtn = $("sync-btn");
+  if (syncBtn) {
+    syncBtn.classList.toggle("hidden", isGuest);
+  }
+  const syncAccordion = $("settings-sync-accordion");
+  if (syncAccordion) {
+    syncAccordion.classList.toggle("hidden", isGuest);
+  }
 }
 
 function openSettingsSheet() {
