@@ -64,6 +64,7 @@ function showScreen(screenId) {
     if (addBtnEl) addBtnEl.classList.add("hidden");
     if (authScreenEl) authScreenEl.classList.remove("hidden");
     if (loadingScreen) loadingScreen.classList.add("hidden");
+    if (typeof setAuthMode === "function") setAuthMode(authMode);
     checkAuthScreenNetwork();
   } else {
     if (authScreenEl) authScreenEl.classList.add("hidden");
