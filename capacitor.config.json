@@ -1,5 +1,10 @@
 {
   "appId": "com.kuraku.budgelist",
   "appName": "Budgelist",
-  "webDir": "www"
+  "webDir": "www",
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
 }

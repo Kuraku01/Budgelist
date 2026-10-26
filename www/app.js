@@ -1517,6 +1517,50 @@ function showUpdateModal(latestTag, downloadUrl, isForced = false) {
   if (updateModal) updateModal.classList.remove("hidden");
 }
 
+async function nativeFetch(url, options = {}) {
+  const capHttp = (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
+  if (capHttp && typeof capHttp.request === "function") {
+    try {
+      const isArrayBuffer = options.responseType === "arraybuffer" || options.isBlob;
+      const res = await capHttp.request({
+        method: options.method || "GET",
+        url: url,
+        headers: options.headers || {},
+        responseType: isArrayBuffer ? "arraybuffer" : "text"
+      });
+      if (res && res.status >= 200 && res.status < 300) {
+        let rawData = res.data;
+        if (isArrayBuffer && typeof rawData === "string") {
+          const binaryString = atob(rawData);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return {
+            ok: true,
+            status: res.status,
+            headers: new Headers(res.headers || {}),
+            arrayBuffer: async () => bytes.buffer,
+            blob: async () => new Blob([bytes.buffer])
+          };
+        }
+        return {
+          ok: true,
+          status: res.status,
+          headers: new Headers(res.headers || {}),
+          json: async () => (typeof rawData === "string" ? JSON.parse(rawData) : rawData),
+          text: async () => (typeof rawData === "string" ? rawData : JSON.stringify(rawData)),
+          blob: async () => new Blob([typeof rawData === "string" ? rawData : JSON.stringify(rawData)])
+        };
+      }
+    } catch (e) {
+      console.warn("[OTA] Native CapacitorHttp failed, falling back to window.fetch:", e);
+    }
+  }
+  return fetch(url, options);
+}
+
 async function checkForAppUpdates(isStartup = false, silent = false) {
   if (!silent) showToast("Checking for updates...");
   const online = await checkNetworkConnection();
@@ -1530,7 +1574,7 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`, {
+    const res = await nativeFetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`, {
       headers: { Accept: "application/vnd.github.v3+json" },
       signal: controller.signal,
     });
@@ -1635,7 +1679,7 @@ async function checkAndApplyOtaZipBundle(release) {
 
   try {
     if (statusDetail) statusDetail.textContent = "Fetching release assets...";
-    const res = await fetch(zipAsset.browser_download_url, { signal: otaCancelController.signal });
+    const res = await nativeFetch(zipAsset.browser_download_url, { signal: otaCancelController.signal, isBlob: true });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const contentLength = res.headers.get("content-length");
