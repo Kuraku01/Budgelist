@@ -39,7 +39,7 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.1-beta' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.2-beta' }}
           overwrite: true
           files: |
             dist.zip
