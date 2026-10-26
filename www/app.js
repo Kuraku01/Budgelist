@@ -1518,6 +1518,49 @@ function showUpdateModal(latestTag, downloadUrl, isForced = false) {
 }
 
 async function nativeFetch(url, options = {}) {
+  // 1. Try direct low-level Capacitor native IPC promise call
+  if (window.Capacitor && typeof window.Capacitor.nativePromise === "function") {
+    try {
+      const isArrayBuffer = options.responseType === "arraybuffer" || options.isBlob;
+      const res = await window.Capacitor.nativePromise("CapacitorHttp", "request", {
+        method: options.method || "GET",
+        url: url,
+        headers: options.headers || {},
+        responseType: isArrayBuffer ? "arraybuffer" : "text"
+      });
+
+      if (res && res.status >= 200 && res.status < 300) {
+        let rawData = res.data;
+        if (isArrayBuffer && typeof rawData === "string") {
+          const binaryString = atob(rawData);
+          const len = binaryString.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          return {
+            ok: true,
+            status: res.status,
+            headers: new Headers(res.headers || {}),
+            arrayBuffer: async () => bytes.buffer,
+            blob: async () => new Blob([bytes.buffer])
+          };
+        }
+        return {
+          ok: true,
+          status: res.status,
+          headers: new Headers(res.headers || {}),
+          json: async () => (typeof rawData === "string" ? JSON.parse(rawData) : rawData),
+          text: async () => (typeof rawData === "string" ? rawData : JSON.stringify(rawData)),
+          blob: async () => new Blob([typeof rawData === "string" ? rawData : JSON.stringify(rawData)])
+        };
+      }
+    } catch (e) {
+      console.warn("[OTA] Capacitor.nativePromise CapacitorHttp request failed:", e);
+    }
+  }
+
+  // 2. Try window.Capacitor.Plugins.CapacitorHttp wrapper
   const capPlugins = window.Capacitor && window.Capacitor.Plugins;
   const capHttp = (capPlugins && capPlugins.CapacitorHttp) || (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
   if (capHttp && typeof capHttp.request === "function") {
@@ -1559,6 +1602,7 @@ async function nativeFetch(url, options = {}) {
       console.warn("[OTA] Native CapacitorHttp failed, falling back to window.fetch:", e);
     }
   }
+
   return fetch(url, options);
 }
 
