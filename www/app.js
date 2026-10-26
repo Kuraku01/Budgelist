@@ -1524,9 +1524,11 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
     return false;
   }
 
+  const originScreen = isGuest || uid ? "app" : "auth";
+
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1`, {
       headers: { Accept: "application/vnd.github.v3+json" },
       signal: controller.signal,
@@ -1561,6 +1563,10 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
     if (!silent) showToast(`You are on the latest version (v${APP_VERSION})`);
   } catch (e) {
     if (!silent) showToast(`You are on version v${APP_VERSION}`);
+  } finally {
+    if (!isStartup) {
+      showScreen(originScreen);
+    }
   }
   return false;
 }
@@ -1759,7 +1765,7 @@ function setAuthMode(mode) {
     mainAuthBtn.textContent = "Log in";
     toggleAuthModeBtn.textContent = "Create account";
     authTitle.textContent = "Budget, listed.";
-    authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
+    authSub.innerHTML = 'Log spending, catch recurring bills, and see where the month is headed before it\'s over.<br><span style="display:inline-block; margin-top:10px; padding:6px 12px; background:rgba(99,102,241,0.12); border:1px solid var(--primary); border-radius:var(--radius-sm); color:var(--primary); font-size:13px; font-weight:700;">✨ Live OTA Test: Update Received Successfully! ✨</span>';
   } else {
     usernameFieldWrap.classList.remove("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.add("hidden");
