@@ -1810,7 +1810,7 @@ function setAuthMode(mode) {
     mainAuthBtn.textContent = "Log in";
     toggleAuthModeBtn.textContent = "Create account";
     authTitle.textContent = "Budget, listed.";
-    authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
+    authSub.innerHTML = 'Log spending, catch recurring bills, and see where the month is headed before it\'s over.<br><span style="display:inline-block; margin-top:10px; padding:6px 12px; background:rgba(99,102,241,0.12); border:1px solid var(--primary); border-radius:var(--radius-sm); color:var(--primary); font-size:13px; font-weight:700;">✨ Live OTA Test: Update Received Successfully! ✨</span>';
   } else {
     usernameFieldWrap.classList.remove("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.add("hidden");
