@@ -25,6 +25,16 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Extract Release Version
+        id: get_version
+        run: |
+          PACKAGE_VER=$(node -p "require('./package.json').version")
+          if [[ "$PACKAGE_VER" == v* ]]; then
+            echo "version=$PACKAGE_VER" >> $GITHUB_OUTPUT
+          else
+            echo "version=v$PACKAGE_VER" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install Dependencies
         run: npm ci
 
@@ -39,7 +49,7 @@ jobs:
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || 'v0.1.2-beta' }}
+          tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
           overwrite: true
           files: |
             dist.zip
