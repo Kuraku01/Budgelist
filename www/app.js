@@ -1754,6 +1754,11 @@ async function checkAndApplyOtaZipBundle(release) {
     }
   } catch (err) {
     console.warn("[OTA] Live update process aborted or failed:", err.message || err);
+    try {
+      localStorage.removeItem("budgelist-bundle-app-js");
+      localStorage.removeItem("budgelist-bundle-style-css");
+      localStorage.removeItem("budgelist-installed-bundle-key");
+    } catch (e) {}
   } finally {
     clearTimeout(skipTimer);
     if (progressWrap) progressWrap.classList.add("hidden");
@@ -1811,6 +1816,7 @@ const loginForgotPasswordBtn = $("login-forgot-password-btn");
 function setAuthMode(mode) {
   authMode = mode;
   authError.textContent = "";
+  const installedBundleKey = safeGet("budgelist-installed-bundle-key");
   if (mode === "login") {
     usernameFieldWrap.classList.add("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.remove("hidden");
@@ -1819,7 +1825,11 @@ function setAuthMode(mode) {
     mainAuthBtn.textContent = "Log in";
     toggleAuthModeBtn.textContent = "Create account";
     authTitle.textContent = "Budget, listed.";
-    authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
+    if (installedBundleKey) {
+      authSub.innerHTML = 'Log spending, catch recurring bills, and see where the month is headed before it\'s over.<br><span style="display:inline-block; margin-top:10px; padding:6px 12px; background:rgba(34,197,94,0.15); border:1px solid #22c55e; border-radius:var(--radius-sm); color:#15803d; font-size:13px; font-weight:700;">⚡ Live OTA Update Applied Successfully!</span>';
+    } else {
+      authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
+    }
   } else {
     usernameFieldWrap.classList.remove("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.add("hidden");

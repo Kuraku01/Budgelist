@@ -1368,6 +1368,21 @@
     </div>
 
     <script>
+      // Clear stale web bundle if native APK/app version changed
+      (function checkBundleValidity() {
+        var NATIVE_BUILD_KEY = "v0.1.1-beta_b10";
+        var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
+        if (currentBuildKey !== NATIVE_BUILD_KEY) {
+          console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
+          try {
+            localStorage.removeItem("budgelist-bundle-app-js");
+            localStorage.removeItem("budgelist-bundle-style-css");
+            localStorage.removeItem("budgelist-installed-bundle-key");
+            localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
+          } catch (e) {}
+        }
+      })();
+
       window.bootApp = function bootApp() {
         if (window.__booted) return;
         window.__booted = true;
