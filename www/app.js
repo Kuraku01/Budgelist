@@ -1518,7 +1518,8 @@ function showUpdateModal(latestTag, downloadUrl, isForced = false) {
 }
 
 async function nativeFetch(url, options = {}) {
-  const capHttp = (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
+  const capPlugins = window.Capacitor && window.Capacitor.Plugins;
+  const capHttp = (capPlugins && capPlugins.CapacitorHttp) || (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
   if (capHttp && typeof capHttp.request === "function") {
     try {
       const isArrayBuffer = options.responseType === "arraybuffer" || options.isBlob;
