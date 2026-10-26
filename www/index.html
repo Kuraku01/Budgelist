@@ -1370,7 +1370,7 @@
     <script>
       // Clear stale web bundle if native APK/app version changed
       (function checkBundleValidity() {
-        var NATIVE_BUILD_KEY = "v0.1.1-beta_b10";
+        var NATIVE_BUILD_KEY = "v0.1.1-beta_b12";
         var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
         if (currentBuildKey !== NATIVE_BUILD_KEY) {
           console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
