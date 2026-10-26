@@ -1,3 +1,4 @@
+// OTA Bundle Build Key: v0.1.1-beta_b11
 const {
   firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
