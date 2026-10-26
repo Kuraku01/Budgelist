@@ -53,6 +53,36 @@
         collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
       };
 
+      window.firebaseConfig = firebaseConfig;
+      window.initializeApp = initializeApp;
+      window.getAuth = getAuth;
+      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+      window.signOut = signOut;
+      window.onAuthStateChanged = onAuthStateChanged;
+      window.sendEmailVerification = sendEmailVerification;
+      window.sendPasswordResetEmail = sendPasswordResetEmail;
+      window.EmailAuthProvider = EmailAuthProvider;
+      window.reauthenticateWithCredential = reauthenticateWithCredential;
+      window.updatePassword = updatePassword;
+      window.verifyBeforeUpdateEmail = verifyBeforeUpdateEmail;
+      window.updateProfile = updateProfile;
+      window.updateEmail = updateEmail;
+      window.setPersistence = setPersistence;
+      window.browserLocalPersistence = browserLocalPersistence;
+      window.getFirestore = getFirestore;
+      window.doc = doc;
+      window.getDoc = getDoc;
+      window.setDoc = setDoc;
+      window.collection = collection;
+      window.addDoc = addDoc;
+      window.updateDoc = updateDoc;
+      window.deleteDoc = deleteDoc;
+      window.getDocs = getDocs;
+      window.query = query;
+      window.orderBy = orderBy;
+      window.writeBatch = writeBatch;
+
       if (typeof window.bootApp === "function") {
         window.bootApp();
       }

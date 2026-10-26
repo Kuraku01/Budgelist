@@ -1,32 +1,11 @@
-const firebaseConfig = window.firebaseConfig || {};
-const initializeApp = window.initializeApp || (() => ({}));
-const getAuth = window.getAuth || (() => ({}));
-const createUserWithEmailAndPassword = window.createUserWithEmailAndPassword;
-const signInWithEmailAndPassword = window.signInWithEmailAndPassword;
-const signOut = window.signOut;
-const onAuthStateChanged = window.onAuthStateChanged || (() => {});
-const sendEmailVerification = window.sendEmailVerification;
-const sendPasswordResetEmail = window.sendPasswordResetEmail;
-const EmailAuthProvider = window.EmailAuthProvider;
-const reauthenticateWithCredential = window.reauthenticateWithCredential;
-const updatePassword = window.updatePassword;
-const verifyBeforeUpdateEmail = window.verifyBeforeUpdateEmail;
-const updateProfile = window.updateProfile;
-const updateEmail = window.updateEmail;
-const setPersistence = window.setPersistence;
-const browserLocalPersistence = window.browserLocalPersistence;
-const getFirestore = window.getFirestore || (() => ({}));
-const doc = window.doc;
-const getDoc = window.getDoc;
-const setDoc = window.setDoc;
-const collection = window.collection;
-const addDoc = window.addDoc;
-const updateDoc = window.updateDoc;
-const deleteDoc = window.deleteDoc;
-const getDocs = window.getDocs;
-const query = window.query;
-const orderBy = window.orderBy;
-const writeBatch = window.writeBatch;
+const {
+  firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
+  signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
+  sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
+  updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+  setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
+  collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+} = window.__FIREBASE__ || window;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
