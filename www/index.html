@@ -44,35 +44,18 @@
         deleteDoc, getDocs, query, orderBy, writeBatch,
       } from "./lib/firebase/firebase-firestore.js";
 
-      window.firebaseConfig = firebaseConfig;
-      window.initializeApp = initializeApp;
-      window.getAuth = getAuth;
-      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
-      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
-      window.signOut = signOut;
-      window.onAuthStateChanged = onAuthStateChanged;
-      window.sendEmailVerification = sendEmailVerification;
-      window.sendPasswordResetEmail = sendPasswordResetEmail;
-      window.EmailAuthProvider = EmailAuthProvider;
-      window.reauthenticateWithCredential = reauthenticateWithCredential;
-      window.updatePassword = updatePassword;
-      window.verifyBeforeUpdateEmail = verifyBeforeUpdateEmail;
-      window.updateProfile = updateProfile;
-      window.updateEmail = updateEmail;
-      window.setPersistence = setPersistence;
-      window.browserLocalPersistence = browserLocalPersistence;
-      window.getFirestore = getFirestore;
-      window.doc = doc;
-      window.getDoc = getDoc;
-      window.setDoc = setDoc;
-      window.collection = collection;
-      window.addDoc = addDoc;
-      window.updateDoc = updateDoc;
-      window.deleteDoc = deleteDoc;
-      window.getDocs = getDocs;
-      window.query = query;
-      window.orderBy = orderBy;
-      window.writeBatch = writeBatch;
+      window.__FIREBASE__ = {
+        firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
+        signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
+        sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
+        updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+        setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
+        collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+      };
+
+      if (typeof window.bootApp === "function") {
+        window.bootApp();
+      }
     </script>
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
@@ -107,6 +90,10 @@
         <div id="ota-progress-wrap" class="ota-progress-wrap hidden">
           <div id="ota-progress-bar" class="ota-progress-bar" style="width: 0%;"></div>
         </div>
+        <p id="ota-status-detail" class="ota-status-detail hidden" style="font-size: 13px; color: var(--ink-soft); margin-top: 8px; text-align: center;"></p>
+        <button type="button" id="ota-skip-btn" class="btn-ghost hidden" style="margin-top: 12px; padding: 6px 16px; font-size: 13px;">
+          Skip Update &amp; Continue
+        </button>
       </div>
     </section>
 
@@ -1351,12 +1338,9 @@
     </div>
 
     <script>
-      (async function boot() {
-        var checks = 0;
-        while (!window.initializeApp && checks < 50) {
-          await new Promise(function (resolve) { setTimeout(resolve, 20); });
-          checks++;
-        }
+      window.bootApp = function bootApp() {
+        if (window.__booted) return;
+        window.__booted = true;
 
         var cachedAppJs = null;
         try {
@@ -1369,7 +1353,7 @@
             runner();
             return;
           } catch (err) {
-            console.error("[OTA] Cached bundle execution failed, falling back to native app.js:", err);
+            console.error("[OTA] Cached bundle execution failed, clearing cache and falling back to native app.js:", err);
             try {
               localStorage.removeItem("budgelist-bundle-app-js");
               localStorage.removeItem("budgelist-bundle-style-css");
@@ -1383,7 +1367,11 @@
         script.type = "module";
         script.src = "app.js";
         document.body.appendChild(script);
-      })();
+      };
+
+      if (window.__FIREBASE__) {
+        window.bootApp();
+      }
     </script>
   </body>
 </html>

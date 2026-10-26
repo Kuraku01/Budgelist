@@ -1588,6 +1588,7 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
 
 // ---------- GitHub Release ZIP OTA Live Updates Engine ----------
 let isOtaUpdating = false;
+let otaCancelController = null;
 
 async function checkAndApplyOtaZipBundle(release) {
   if (isOtaUpdating || !release || !Array.isArray(release.assets)) return false;
@@ -1609,25 +1610,46 @@ async function checkAndApplyOtaZipBundle(release) {
   if (!isSameOrNewerVersion(latestTag, APP_VERSION)) return false;
 
   if (typeof JSZip === "undefined") {
-    console.warn("JSZip is not loaded, skipping OTA bundle extraction.");
+    console.warn("[OTA] JSZip is not loaded, skipping OTA bundle extraction.");
     return false;
   }
 
   isOtaUpdating = true;
-  console.log(`[OTA] Found web bundle update (${latestTag}), downloading...`);
+  console.log(`[OTA] Starting web bundle download: ${bundleKey}`);
 
   const statusText = $("loading-status-text");
   const progressWrap = $("ota-progress-wrap");
   const progressBar = $("ota-progress-bar");
+  const statusDetail = $("ota-status-detail");
+  const skipBtn = $("ota-skip-btn");
 
-  // Ensure loading screen is visible while installing the OTA update
   showScreen("loading");
-  if (statusText) statusText.textContent = `Downloading update (${latestTag})...`;
+  if (statusText) statusText.textContent = `Updating Budgelist (${latestTag})...`;
   if (progressWrap) progressWrap.classList.remove("hidden");
   if (progressBar) progressBar.style.width = "5%";
+  if (statusDetail) {
+    statusDetail.classList.remove("hidden");
+    statusDetail.textContent = "Connecting to update server...";
+  }
+
+  let skipped = false;
+  otaCancelController = new AbortController();
+
+  let skipTimer = setTimeout(() => {
+    if (skipBtn) skipBtn.classList.remove("hidden");
+  }, 5000);
+
+  if (skipBtn) {
+    skipBtn.onclick = () => {
+      console.log("[OTA] User cancelled update.");
+      skipped = true;
+      if (otaCancelController) otaCancelController.abort();
+    };
+  }
 
   try {
-    const res = await fetch(zipAsset.browser_download_url);
+    if (statusDetail) statusDetail.textContent = "Fetching release assets...";
+    const res = await fetch(zipAsset.browser_download_url, { signal: otaCancelController.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const contentLength = res.headers.get("content-length");
@@ -1640,13 +1662,15 @@ async function checkAndApplyOtaZipBundle(release) {
       const chunks = [];
 
       while (true) {
+        if (skipped) throw new Error("Update cancelled by user.");
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
         receivedBytes += value.length;
         const pct = Math.min(90, Math.round((receivedBytes / totalBytes) * 90));
-        if (statusText) statusText.textContent = `Downloading update: ${pct}%`;
+        if (statusText) statusText.textContent = `Downloading update (${latestTag}): ${pct}%`;
         if (progressBar) progressBar.style.width = `${pct}%`;
+        if (statusDetail) statusDetail.textContent = `${Math.round(receivedBytes / 1024)} KB / ${Math.round(totalBytes / 1024)} KB`;
       }
       blob = new Blob(chunks);
     } else {
@@ -1654,7 +1678,10 @@ async function checkAndApplyOtaZipBundle(release) {
       if (progressBar) progressBar.style.width = "70%";
     }
 
-    if (statusText) statusText.textContent = "Extracting & applying update...";
+    if (skipped) throw new Error("Update cancelled by user.");
+
+    if (statusText) statusText.textContent = "Extracting assets...";
+    if (statusDetail) statusDetail.textContent = "Unpacking web bundle...";
     if (progressBar) progressBar.style.width = "90%";
 
     const zip = await JSZip.loadAsync(blob);
@@ -1677,28 +1704,27 @@ async function checkAndApplyOtaZipBundle(release) {
       safeSet("budgelist-installed-bundle-tag", latestTag);
 
       if (progressBar) progressBar.style.width = "100%";
-      if (statusText) statusText.textContent = "Update complete! Reloading...";
-      console.log(`[OTA] Web bundle ${latestTag} extracted & applying now.`);
+      if (statusText) statusText.textContent = "Update complete!";
+      if (statusDetail) statusDetail.textContent = "Reloading application...";
+      console.log(`[OTA] Web bundle ${bundleKey} installed successfully.`);
 
       setTimeout(() => {
         window.location.reload();
-      }, 600);
+      }, 400);
       return true;
     }
   } catch (err) {
-    console.warn("[OTA] Live update download failed:", err);
-    if (progressWrap) progressWrap.classList.add("hidden");
-    if (statusText) statusText.textContent = "Loading session...";
+    console.warn("[OTA] Live update process aborted or failed:", err.message || err);
   } finally {
+    clearTimeout(skipTimer);
+    if (progressWrap) progressWrap.classList.add("hidden");
+    if (statusDetail) statusDetail.classList.add("hidden");
+    if (skipBtn) skipBtn.classList.add("hidden");
+    if (statusText) statusText.textContent = "Loading session...";
     isOtaUpdating = false;
   }
   return false;
 }
-
-// Automatically check for required updates on app launch
-setTimeout(() => {
-  checkForAppUpdates(true, true);
-}, 1200);
 
 $("check-update-btn").addEventListener("click", () => {
   checkForAppUpdates(false, false);
@@ -1843,9 +1869,17 @@ const authTimeout = setTimeout(() => {
   }
 }, 2200);
 
+let isInitialStartupUpdateChecked = false;
+
 onAuthStateChanged(auth, async (user) => {
   isAuthResolved = true;
   clearTimeout(authTimeout);
+
+  if (!isInitialStartupUpdateChecked) {
+    isInitialStartupUpdateChecked = true;
+    const otaHandled = await checkForAppUpdates(true, true);
+    if (otaHandled) return;
+  }
 
   if (user && !isGuest) {
     uid = user.uid;
