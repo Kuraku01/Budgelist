@@ -50,10 +50,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
-          overwrite: true
+          name: Budgelist ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
           files: |
             dist.zip
-          generate_release_notes: true
+          generate_release_notes: ${{ github.ref_type == 'tag' }}
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
