@@ -1751,7 +1751,14 @@ async function checkAndApplyOtaZipBundle(release) {
       }
     }
 
-    if (updates["app.js"] || updates["style.css"]) {
+    if (updates["index.html"]) {
+      const match = updates["index.html"].match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      if (match && match[1]) {
+        safeSet("budgelist-bundle-body-html", match[1].trim());
+      }
+    }
+
+    if (updates["app.js"] || updates["style.css"] || updates["index.html"]) {
       if (updates["app.js"]) safeSet("budgelist-bundle-app-js", updates["app.js"]);
       if (updates["style.css"]) safeSet("budgelist-bundle-style-css", updates["style.css"]);
       safeSet("budgelist-installed-bundle-key", bundleKey);
@@ -1772,6 +1779,7 @@ async function checkAndApplyOtaZipBundle(release) {
     try {
       localStorage.removeItem("budgelist-bundle-app-js");
       localStorage.removeItem("budgelist-bundle-style-css");
+      localStorage.removeItem("budgelist-bundle-body-html");
       localStorage.removeItem("budgelist-installed-bundle-key");
     } catch (e) {}
   } finally {

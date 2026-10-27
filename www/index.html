@@ -1446,6 +1446,7 @@
           try {
             localStorage.removeItem("budgelist-bundle-app-js");
             localStorage.removeItem("budgelist-bundle-style-css");
+            localStorage.removeItem("budgelist-bundle-body-html");
             localStorage.removeItem("budgelist-installed-bundle-key");
             localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
           } catch (e) {}
@@ -1455,6 +1456,16 @@
       window.bootApp = function bootApp() {
         if (window.__booted) return;
         window.__booted = true;
+
+        // Apply live OTA HTML body override if present
+        try {
+          var cachedBodyHtml = localStorage.getItem("budgelist-bundle-body-html");
+          if (cachedBodyHtml) {
+            document.body.innerHTML = cachedBodyHtml;
+          }
+        } catch (e) {
+          console.warn("[OTA] Failed to apply cached body HTML:", e);
+        }
 
         var cachedAppJs = null;
         try {
@@ -1471,6 +1482,7 @@
             try {
               localStorage.removeItem("budgelist-bundle-app-js");
               localStorage.removeItem("budgelist-bundle-style-css");
+              localStorage.removeItem("budgelist-bundle-body-html");
               localStorage.removeItem("budgelist-installed-bundle-key");
             } catch (e) {}
           }
