@@ -32,6 +32,17 @@ const $ = (id) => document.getElementById(id);
 function safeGet(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 function safeSet(key, value) { try { localStorage.setItem(key, value); return true; } catch (e) { return false; } }
 
+// Apply Live OTA HTML Body Override if present
+try {
+  const otaBodyHtml = safeGet("budgelist-bundle-body-html");
+  if (otaBodyHtml && !window.__otaBodyInjected) {
+    window.__otaBodyInjected = true;
+    document.body.innerHTML = otaBodyHtml;
+  }
+} catch (e) {
+  console.warn("[OTA] Body HTML injection failed:", e);
+}
+
 const authScreen = $("auth-screen"), appScreen = $("app-screen");
 const authForm = $("auth-form"), authError = $("auth-error");
 const addBtn = $("add-btn"), addSheet = $("add-sheet"), expenseForm = $("expense-form");
