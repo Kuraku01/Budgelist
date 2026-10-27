@@ -2833,78 +2833,190 @@ function escapeHtml(s) {
     .replace(/'/g, "&#039;");
 }
 
+function getHistoricalDailyVelocity(targetDate) {
+  const pastVelocities = [];
+  for (let i = 1; i <= 3; i++) {
+    const pastDate = new Date(targetDate.getFullYear(), targetDate.getMonth() - i, 1);
+    const prefix = toLocalMonthPrefix(pastDate);
+    const pastExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(prefix) && !e.recurringId);
+    if (pastExpenses.length > 0) {
+      const daysInPastMonth = new Date(pastDate.getFullYear(), pastDate.getMonth() + 1, 0).getDate();
+      const pastTotalVar = pastExpenses.reduce((s, e) => s + e.amount, 0);
+      const vel = pastTotalVar / daysInPastMonth;
+      if (vel > 0) pastVelocities.push(vel);
+    }
+  }
+  if (pastVelocities.length === 0) return null;
+  return pastVelocities.reduce((a, b) => a + b, 0) / pastVelocities.length;
+}
+
 function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
   const container = $("forecast-chart");
   const legend = $("forecast-legend");
   const empty = $("forecast-empty");
   const note = $("forecast-note");
+  const metricsEl = $("forecast-metrics");
+  const warning = $("budget-warning");
 
   if (monthExpenses.length === 0) {
     container.classList.add("hidden");
     container.innerHTML = "";
     legend.classList.add("hidden");
+    if (metricsEl) metricsEl.classList.add("hidden");
     empty.classList.remove("hidden");
     note.classList.add("hidden");
-    $("budget-warning").classList.add("hidden");
+    warning.classList.add("hidden");
     return;
   }
+
   container.classList.remove("hidden");
   legend.classList.remove("hidden");
   empty.classList.add("hidden");
   note.classList.remove("hidden");
+  if (metricsEl) metricsEl.classList.remove("hidden");
 
+  // 1. Actual daily totals and cumulative array up to `today`
   const dailyTotals = Array(today).fill(0);
+  const dailyVarTotals = Array(today).fill(0);
+
   monthExpenses.forEach((e) => {
     const day = parseInt(e.dateISO.slice(8, 10), 10);
-    if (day >= 1 && day <= today) dailyTotals[day - 1] += e.amount;
+    if (day >= 1 && day <= today) {
+      dailyTotals[day - 1] += e.amount;
+      if (!e.recurringId) dailyVarTotals[day - 1] += e.amount;
+    }
   });
-  const cumulative = [];
-  dailyTotals.reduce((acc, v, i) => (cumulative[i] = acc + v, acc + v), 0);
 
-  const { slope, intercept } = leastSquares(cumulative.map((_, i) => i + 1), cumulative);
-  const projectedTotal = isCurrentMonth
-    ? Math.max(cumulative[cumulative.length - 1] || 0, slope * daysInMonth + intercept)
-    : (cumulative[cumulative.length - 1] || 0);
+  const cumulativeActual = [];
+  dailyTotals.reduce((acc, v, i) => (cumulativeActual[i] = acc + v, acc + v), 0);
+  const currentTotalSpent = cumulativeActual[today - 1] || 0;
+  const currentVarSpent = dailyVarTotals.reduce((a, b) => a + b, 0);
 
-  const labels = [], actual = [], projected = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    labels.push(d);
-    actual.push(d <= today ? cumulative[d - 1] : null);
-    projected.push(isCurrentMonth && d >= today ? slope * d + intercept : null);
+  // 2. Velocity calculations
+  const rawCurrentVel = today > 0 ? currentVarSpent / today : 0;
+  const histVel = getHistoricalDailyVelocity(viewDate);
+  const blendWeight = Math.min(1.0, today / daysInMonth);
+  const vBlend = (histVel != null)
+    ? (1 - blendWeight) * histVel + blendWeight * rawCurrentVel
+    : rawCurrentVel;
+
+  // 3. Upcoming unpaid recurring bills for remaining days in current month
+  let upcomingRecurringTotal = 0;
+  const upcomingRecurringMap = {};
+  if (isCurrentMonth && recurring && recurring.length > 0) {
+    const appliedRecurringIds = new Set(
+      monthExpenses.filter((e) => e.recurringId).map((e) => e.recurringId)
+    );
+    recurring.forEach((r) => {
+      if (r.dayOfMonth > today && !appliedRecurringIds.has(r.id)) {
+        upcomingRecurringTotal += r.amount;
+        const d = Math.min(daysInMonth, Math.max(1, r.dayOfMonth));
+        upcomingRecurringMap[d] = (upcomingRecurringMap[d] || 0) + r.amount;
+      }
+    });
   }
-  drawChart(labels, actual, projected);
 
+  // 4. Construct actual and projected series for days 1..daysInMonth
+  const labels = [], actual = [], projected = [];
+  for (let d = 1; d <= daysInMonth; d++) labels.push(d);
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    actual.push(d <= today ? cumulativeActual[d - 1] : null);
+  }
+
+  if (isCurrentMonth) {
+    let runningProj = currentTotalSpent;
+    projected.push(...Array(today - 1).fill(null));
+    projected.push(runningProj);
+
+    for (let d = today + 1; d <= daysInMonth; d++) {
+      const scheduledRec = upcomingRecurringMap[d] || 0;
+      runningProj += vBlend + scheduledRec;
+      projected.push(Math.round(runningProj * 100) / 100);
+    }
+  } else {
+    projected.push(...Array(daysInMonth).fill(null));
+  }
+
+  const projectedTotal = isCurrentMonth
+    ? (projected[daysInMonth - 1] != null ? projected[daysInMonth - 1] : currentTotalSpent)
+    : currentTotalSpent;
+
+  // 5. Calculate Safe Daily Spend Allowance
+  const remainingDays = Math.max(1, daysInMonth - today);
+  let safeDailyAllowance = 0;
+  if (monthlyBudget > 0 && isCurrentMonth) {
+    const remainingBudgetPool = monthlyBudget - currentTotalSpent - upcomingRecurringTotal;
+    safeDailyAllowance = Math.max(0, remainingBudgetPool / remainingDays);
+  }
+
+  // 6. Update Metric Cards
+  const projValEl = $("metric-projected");
+  const paceValEl = $("metric-pace");
+  const allowValEl = $("metric-allowance");
+
+  if (projValEl) projValEl.textContent = fmt(projectedTotal);
+  if (paceValEl) paceValEl.textContent = `${fmt(vBlend)}/day`;
+  if (allowValEl) {
+    allowValEl.textContent = monthlyBudget > 0 ? `${fmt(safeDailyAllowance)}/day` : "N/A";
+  }
+
+  if (monthlyBudget > 0 && isCurrentMonth) {
+    if (projectedTotal > monthlyBudget) {
+      if (projValEl) projValEl.className = "metric-value warn";
+      if (allowValEl) allowValEl.className = "metric-value warn";
+    } else if (projectedTotal >= 0.85 * monthlyBudget) {
+      if (projValEl) projValEl.className = "metric-value caution";
+      if (allowValEl) allowValEl.className = "metric-value caution";
+    } else {
+      if (projValEl) projValEl.className = "metric-value safe";
+      if (allowValEl) allowValEl.className = "metric-value safe";
+    }
+  } else {
+    if (projValEl) projValEl.className = "metric-value";
+    if (allowValEl) allowValEl.className = "metric-value";
+  }
+
+  // 7. Render Chart
+  drawChart(labels, actual, projected, monthlyBudget > 0 ? monthlyBudget : null);
+
+  // 8. Note & Multi-tier Warning Messages
   note.textContent = isCurrentMonth
     ? `Trending toward ${fmt(Math.max(0, projectedTotal))} by day ${daysInMonth}` +
-      (monthlyBudget > 0 ? ` (budget: ${fmt(monthlyBudget)}).` : ".")
+      (upcomingRecurringTotal > 0 ? ` (includes ${fmt(upcomingRecurringTotal)} upcoming bills)` : "") +
+      (monthlyBudget > 0 ? ` with budget of ${fmt(monthlyBudget)}.` : ".")
     : `${fmt(projectedTotal)} spent this month.`;
 
-  const warning = $("budget-warning");
-  if (monthlyBudget > 0 && projectedTotal > monthlyBudget) {
+  const warningText = $("budget-warning-text");
+  warning.className = "warning hidden";
+
+  if (monthlyBudget > 0) {
     warning.classList.remove("hidden");
-    $("budget-warning-text").textContent = isCurrentMonth
-      ? `At this pace you'll be ${fmt(projectedTotal - monthlyBudget)} over budget this month.`
-      : `This month ended ${fmt(projectedTotal - monthlyBudget)} over budget.`;
-  } else {
-    warning.classList.add("hidden");
+    if (currentTotalSpent > monthlyBudget) {
+      warning.classList.add("critical");
+      warningText.textContent = isCurrentMonth
+        ? `Over Budget: You've spent ${fmt(currentTotalSpent)} of your ${fmt(monthlyBudget)} budget (${fmt(currentTotalSpent - monthlyBudget)} over limit). Safe daily allowance is ${fmt(0)}.`
+        : `Over Budget: Month ended ${fmt(currentTotalSpent - monthlyBudget)} over budget (${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)}).`;
+    } else if (isCurrentMonth && projectedTotal > monthlyBudget) {
+      const overage = projectedTotal - monthlyBudget;
+      warning.classList.add("critical");
+      warningText.textContent = `Budget Warning: At your current pace (${fmt(vBlend)}/day + upcoming bills), projected spending is ${fmt(projectedTotal)}, which is ${fmt(overage)} over your ${fmt(monthlyBudget)} budget. Limit daily variable spending to ${fmt(safeDailyAllowance)}/day.`;
+    } else if (isCurrentMonth && projectedTotal >= 0.85 * monthlyBudget) {
+      const pct = Math.round((projectedTotal / monthlyBudget) * 100);
+      warning.classList.add("caution");
+      warningText.textContent = `Budget Caution: On track to spend ${fmt(projectedTotal)} (${pct}% of your ${fmt(monthlyBudget)} budget). To stay within budget, aim to keep daily spend around ${fmt(safeDailyAllowance)}/day.`;
+    } else if (isCurrentMonth) {
+      const pct = Math.round((projectedTotal / monthlyBudget) * 100);
+      warning.classList.add("safe");
+      warningText.textContent = `On Track: Projected total is ${fmt(projectedTotal)} (${pct}% of your ${fmt(monthlyBudget)} budget). Safe daily target: ${fmt(safeDailyAllowance)}/day.`;
+    } else {
+      warning.classList.add("safe");
+      warningText.textContent = `Ended within budget: ${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)} budget.`;
+    }
   }
 }
 
-function leastSquares(xs, ys) {
-  const n = xs.length;
-  if (n < 2) return { slope: ys[0] || 0, intercept: 0 };
-  const sumX = xs.reduce((a, b) => a + b, 0);
-  const sumY = ys.reduce((a, b) => a + b, 0);
-  const sumXY = xs.reduce((s, x, i) => s + x * ys[i], 0);
-  const sumXX = xs.reduce((s, x) => s + x * x, 0);
-  const denom = n * sumXX - sumX * sumX;
-  if (denom === 0) return { slope: 0, intercept: sumY / n };
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  return { slope, intercept };
-}
-
-function drawChart(labels, actual, projected) {
+function drawChart(labels, actual, projected, budget) {
   const styles = getComputedStyle(document.documentElement);
   const primary = styles.getPropertyValue("--primary").trim();
   const warn = styles.getPropertyValue("--warn").trim();
@@ -2914,9 +3026,20 @@ function drawChart(labels, actual, projected) {
   $("legend-dot-spent").style.background = primary;
   $("legend-dot-projected").style.background = warn;
 
-  const width = 320, height = 160, pad = { top: 10, right: 10, bottom: 22, left: 34 };
+  const budgetLegendItem = $("legend-item-budget");
+  const budgetDot = $("legend-dot-budget");
+  if (budgetLegendItem && budgetDot) {
+    if (budget && budget > 0) {
+      budgetLegendItem.classList.remove("hidden");
+      budgetDot.style.background = inkSoft;
+    } else {
+      budgetLegendItem.classList.add("hidden");
+    }
+  }
+
+  const width = 320, height = 160, pad = { top: 10, right: 10, bottom: 22, left: 38 };
   const innerW = width - pad.left - pad.right, innerH = height - pad.top - pad.bottom;
-  const allVals = [...actual, ...projected].filter((v) => v != null);
+  const allVals = [...actual, ...projected, budget].filter((v) => v != null && v > 0);
   const maxY = Math.max(10, ...allVals) * 1.15;
   const n = labels.length;
   const xAt = (i) => pad.left + (n <= 1 ? 0 : (i / (n - 1)) * innerW);
@@ -2938,6 +3061,12 @@ function drawChart(labels, actual, projected) {
     return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="${lineColor}" stroke-width="1"></line>`;
   }).join("");
 
+  let budgetLineSvg = "";
+  if (budget && budget > 0 && budget <= maxY) {
+    const bY = yAt(budget);
+    budgetLineSvg = `<line x1="${pad.left}" y1="${bY.toFixed(1)}" x2="${width - pad.right}" y2="${bY.toFixed(1)}" stroke="${lineColor}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"></line>`;
+  }
+
   const yLabels = [0, 0.5, 1].map((f) => {
     const y = pad.top + innerH * (1 - f);
     return `<text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${inkSoft}" text-anchor="end" font-family="Inter, sans-serif">$${Math.round(maxY * f)}</text>`;
@@ -2951,6 +3080,7 @@ function drawChart(labels, actual, projected) {
 
   $("forecast-chart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Spending forecast over the month">
     ${gridY}
+    ${budgetLineSvg}
     ${polylines(actual, primary)}
     ${polylines(projected, warn, "5 4")}
     ${yLabels}

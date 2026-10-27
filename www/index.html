@@ -523,6 +523,20 @@
           <h2>Forecast</h2>
           <button id="set-budget-btn" class="link-btn">Set budget</button>
         </div>
+        <div id="forecast-metrics" class="forecast-metrics hidden">
+          <div class="metric-card">
+            <span class="metric-label">Projected</span>
+            <span id="metric-projected" class="metric-value">$0.00</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Daily Pace</span>
+            <span id="metric-pace" class="metric-value">$0.00</span>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Safe Daily</span>
+            <span id="metric-allowance" class="metric-value">$0.00</span>
+          </div>
+        </div>
         <div id="forecast-chart" class="chart-area"></div>
         <div id="forecast-legend" class="chart-legend hidden">
           <span class="legend-item"
@@ -534,6 +548,13 @@
               id="legend-dot-projected"
             ></span
             >Projected</span
+          >
+          <span class="legend-item hidden" id="legend-item-budget"
+            ><span
+              class="legend-dot-line"
+              id="legend-dot-budget"
+            ></span
+            >Budget</span
           >
         </div>
         <p id="forecast-empty" class="empty hidden">
@@ -960,6 +981,18 @@
                     >
                       <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.1.2-beta</h4>
                       <ul>
+                        <li>
+                          <strong>Upgraded Forecast Algorithm:</strong> Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines.
+                        </li>
+                        <li>
+                          <strong>Safe Daily Spend Target:</strong> Real-time daily variable spend allowance to keep your budget on track.
+                        </li>
+                        <li>
+                          <strong>Multi-Tier Budget Warnings:</strong> Intelligent alerts for critical over-budget spending, near-budget caution, and on-track status.
+                        </li>
+                        <li>
+                          <strong>Budget Reference Line:</strong> Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
+                        </li>
                         <li>
                           <strong>Seamless In-App Updates:</strong> Get the latest features and bug fixes automatically when opening the app.
                         </li>

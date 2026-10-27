@@ -9,6 +9,12 @@
   --warn: #ff6b5b;
   --warn-bg: #ffe9e5;
   --warn-ink: #9a3324;
+  --caution: #d97706;
+  --caution-bg: #fffbebf5;
+  --caution-ink: #92400e;
+  --success: #16b378;
+  --success-bg: #e6f8f1;
+  --success-ink: #0d6846;
   --radius: 14px;
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -33,6 +39,12 @@
   --warn: #ff8a7a;
   --warn-bg: #3a2420;
   --warn-ink: #ffb3a3;
+  --caution: #fbbf24;
+  --caution-bg: #322510;
+  --caution-ink: #fde68a;
+  --success: #22c55e;
+  --success-bg: #112d20;
+  --success-ink: #86efac;
 }
 
 * {
@@ -447,6 +459,25 @@ select:focus {
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.warning.caution {
+  background: var(--caution-bg);
+  border-color: var(--caution);
+  color: var(--caution-ink);
+}
+
+.warning.safe, .warning.success {
+  background: var(--success-bg);
+  border-color: var(--success);
+  color: var(--success-ink);
+}
+
+.warning.critical {
+  background: var(--warn-bg);
+  border-color: var(--warn);
+  color: var(--warn-ink);
 }
 
 /* ---------- Budget Bar ---------- */
@@ -586,6 +617,44 @@ select:focus {
 .chart-legend .legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .legend-dot-dash { border-radius: 2px; }
+.legend-dot-line { width: 12px; height: 3px; border-radius: 1px; display: inline-block; }
+
+/* ---------- Forecast Metric Cards ---------- */
+.forecast-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metric-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.metric-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-soft);
+  margin-bottom: 3px;
+}
+
+.metric-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value.caution { color: var(--caution); }
+.metric-value.warn { color: var(--warn); }
+.metric-value.safe { color: var(--success); }
 
 /* ---------- Expense / recurring lists ---------- */
 .expense-list, .recurring-list { list-style: none; margin: 0; padding: 0; }

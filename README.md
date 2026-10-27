@@ -1,6 +1,6 @@
 # Budgelist
 
-![Version](https://img.shields.io/badge/version-0.1.2--beta-purple.svg)
+![Version](https://img.shields.io/badge/version-0.1.3--beta-purple.svg)
 ![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Offline Support](https://img.shields.io/badge/offline-100%25%20supported-brightgreen.svg)
@@ -11,14 +11,12 @@ The application allows users to log daily expenses, track recurring bills, conve
 
 ---
 
-## What's New in v0.1.2-beta
+## What's New in v0.1.3-beta
 
-- **Password Reset Support**: Easily reset forgotten passwords directly from the login card via email verification. Supports looking up accounts by username or email.
-- **CORS-Free Live OTA Engine**: Upgraded in-app update engine using native `CapacitorHttp` network proxying and cache-busting headers (`"Cache-Control": "no-cache"`) to ensure seamless, reliable over-the-air updates.
-- **Username Login & Firestore Stability**: Resolved WebChannel long-polling stream conflicts, ensuring smooth username authentication (`getDoc(doc(db, "usernames", username))`) and cloud sync.
-- **Automatic Native Build Invalidation**: Automatically detects native APK upgrades using `NATIVE_BUILD_KEY` and purges stale web bundles from local storage on boot.
-- **Password Visibility Toggle**: Easily show or hide passwords on login, signup, and settings screens with a single tap on the eye icon.
-- **Smooth Navigation & Screen Restoration**: Manual update checks from Settings now restore active screens automatically upon completion.
+- **Upgraded Forecast Engine**: Multi-factor forecasting algorithm incorporating upcoming unpaid recurring bills on scheduled days and multi-month spend velocity baselines.
+- **Safe Daily Spend Target**: Real-time daily variable spend allowance to keep your budget on track.
+- **Multi-Tier Budget Warnings**: Intelligent alerts for critical over-budget spending (red), near-budget caution (amber), and on-track status (green).
+- **Budget Reference Line**: Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
 
 ---
 
@@ -66,7 +64,7 @@ The application allows users to log daily expenses, track recurring bills, conve
 ### Installing the Android Application
 
 1. Navigate to the [Releases](https://github.com/Kuraku01/Budgelist/releases) page of this repository.
-2. Download the latest `Budgelist_0.1.2-beta.apk` asset.
+2. Download the latest `Budgelist_0.1.3-beta.apk` asset.
 3. Open the downloaded file on your Android device to complete installation.
 
 ### Developer Setup & Building From Source
