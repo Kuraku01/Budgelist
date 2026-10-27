@@ -1667,9 +1667,10 @@ async function checkAndApplyOtaZipBundle(release) {
   const latestTag = (release.tag_name || "").trim();
   const bundleKey = `${latestTag}_${zipAsset.updated_at || zipAsset.id || zipAsset.size}`;
   const installedBundleKey = safeGet("budgelist-installed-bundle-key");
+  const installedBodyHtml = safeGet("budgelist-bundle-body-html");
 
-  // If this exact bundle is already installed, skip
-  if (installedBundleKey === bundleKey) return false;
+  // If this exact bundle is already installed AND body HTML is cached, skip
+  if (installedBundleKey === bundleKey && installedBodyHtml) return false;
 
   // Ensure release is compatible (same or newer version than base app)
   if (!isSameOrNewerVersion(latestTag, APP_VERSION)) return false;
