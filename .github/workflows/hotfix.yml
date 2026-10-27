@@ -53,7 +53,7 @@ jobs:
           name: Budgelist ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
           files: |
             dist.zip
-          overwrite: true
+          overwrite_files: true
           generate_release_notes: ${{ github.ref_type == 'tag' }}
           prerelease: true
           make_latest: true
