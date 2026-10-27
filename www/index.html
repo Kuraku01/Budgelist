@@ -464,26 +464,52 @@
           &#8249;
         </button>
         <div class="month-total-wrap">
-          <p id="month-label" class="month-label">October 2026</p>
-          <div
-            style="
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              gap: 8px;
-            "
-          >
-            <h1 id="month-total">$0.00</h1>
+          <div style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <button id="calendar-dropdown-btn" class="month-label-btn" type="button" aria-expanded="false" aria-label="Select date or month">
+              <span id="month-label">October 2026</span>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button id="calendar-reset-btn" class="calendar-reset-chip hidden" type="button" title="Reset to today">
+              <span>✕ Today</span>
+            </button>
+          </div>
+          <h1 id="month-total" class="hidden">$0.00</h1>
+        </div>
+        <button id="next-month" class="nav-arrow" aria-label="Next month">
+          &#8250;
+        </button>
+      </div>
+
+      <!-- CALENDAR POPOVER -->
+      <div id="calendar-popover" class="calendar-popover hidden">
+        <div class="calendar-popover-head">
+          <span id="calendar-month-title" class="calendar-month-title">October 2026</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <select id="calendar-year-select" class="mini-select" aria-label="Select year"></select>
+            <button id="calendar-today-btn" class="link-btn" type="button">Today</button>
+          </div>
+        </div>
+        <div class="calendar-grid-weekdays">
+          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        </div>
+        <div id="calendar-grid-days" class="calendar-grid-days"></div>
+      </div>
+
+      <!-- SPENDING & BUDGET SUMMARY CARD -->
+      <div id="summary-card" class="summary-card">
+        <div class="summary-card-head">
+          <span class="summary-card-title">Overview</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
             <button
               id="currency-btn"
               class="icon-btn"
               aria-label="Currency options"
               title="Currency options"
-              style="width: 30px; height: 30px;"
+              style="width: 28px; height: 28px;"
             >
               <svg
-                width="18"
-                height="18"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -495,20 +521,25 @@
                 <path d="M20 16H4M9 12l-5 4 5 4" />
               </svg>
             </button>
+            <button id="set-budget-btn" class="link-btn" style="font-size: 12px; font-weight: 700;">Set budget</button>
           </div>
         </div>
-        <button id="next-month" class="nav-arrow" aria-label="Next month">
-          &#8250;
-        </button>
-      </div>
 
-      <div id="budget-bar-wrap" class="budget-bar-wrap hidden">
-        <div class="budget-info">
-          <span id="budget-status-text">Spent $0.00 of $0.00 budget</span>
-          <span id="budget-remaining-text" class="budget-remaining"
-            >$0.00 left</span
-          >
+        <div class="summary-grid">
+          <div class="summary-stat">
+            <span class="summary-stat-label">Spent</span>
+            <span id="summary-spent" class="summary-stat-value">$0.00</span>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-stat-label">Budget</span>
+            <span id="summary-budget" class="summary-stat-value primary">$0.00</span>
+          </div>
+          <div class="summary-stat">
+            <span class="summary-stat-label" id="summary-remaining-label">Remaining</span>
+            <span id="summary-remaining" class="summary-stat-value safe">$0.00</span>
+          </div>
         </div>
+
         <div class="budget-progress-track">
           <div id="budget-progress-fill" class="budget-progress-fill"></div>
         </div>
@@ -520,8 +551,7 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Forecast</h2>
-          <button id="set-budget-btn" class="link-btn">Set budget</button>
+          <h2>Analytics & Forecast</h2>
         </div>
         <div id="forecast-metrics" class="forecast-metrics hidden">
           <div class="metric-card">
@@ -613,10 +643,14 @@
     <!-- ADD/EDIT EXPENSE SHEET -->
     <div id="add-sheet" class="sheet hidden">
       <div class="sheet-content">
+        <div class="sheet-handle"></div>
         <h2 id="expense-sheet-title">Add expense</h2>
         <form id="expense-form">
           <label for="amount">Amount</label>
           <input type="number" id="amount" step="0.01" min="0.01" required />
+
+          <label for="expense-date">Date</label>
+          <input type="date" id="expense-date" required />
 
           <label for="category">Category</label>
           <select id="category">
@@ -656,6 +690,7 @@
     <!-- RECURRING SHEET -->
     <div id="recurring-sheet" class="sheet hidden">
       <div class="sheet-content">
+        <div class="sheet-handle"></div>
         <h2 id="recurring-sheet-title">Add recurring bill</h2>
         <form id="recurring-form">
           <label for="r-amount">Amount</label>
@@ -703,6 +738,7 @@
     <!-- BUDGET SHEET -->
     <div id="budget-sheet" class="sheet hidden">
       <div class="sheet-content">
+        <div class="sheet-handle"></div>
         <h2>Monthly budget</h2>
         <form id="budget-form">
           <label for="budget-input">Budget amount</label>

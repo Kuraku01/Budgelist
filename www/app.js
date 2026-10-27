@@ -90,8 +90,12 @@ let currencySymbol = safeGet("budgelist-currency-symbol") || "$";
 let editingId = null;
 let editingRecurringId = null;
 let viewDate = startOfMonth(new Date());
+let selectedDateISO = null; // null = full month view, or "YYYY-MM-DD" for day filter
+let calendarOpen = false;
 let recurringApplied = false;
 let isSyncing = false;
+
+const dayLabelFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 const CATEGORIES = ["Food", "Transport", "Bills", "Shopping", "Health", "Other"];
 const CAT_VAR = { Food: "--cat-food", Transport: "--cat-transport", Bills: "--cat-bills",
@@ -2175,20 +2179,17 @@ expenseForm.addEventListener("submit", async (e) => {
   const amount = parseFloat($("amount").value);
   const category = $("category").value;
   const note = $("note").value.trim();
+  const customDateInput = $("expense-date") ? $("expense-date").value : null;
   if (!amount || amount <= 0) return;
+
+  let expDate = customDateInput || selectedDateISO || todayISO();
 
   if (isGuest) {
     if (editingId) {
       const exp = expenses.find((x) => x.id === editingId);
-      if (exp) { exp.amount = amount; exp.category = category; exp.note = note; }
+      if (exp) { exp.amount = amount; exp.category = category; exp.note = note; exp.dateISO = expDate; }
       showToast("Expense updated");
     } else {
-      const now = new Date();
-      let expDate = todayISO();
-      if (toLocalMonthPrefix(viewDate) !== toLocalMonthPrefix(now)) {
-        const day = Math.min(now.getDate(), new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate());
-        expDate = toLocalISO(new Date(viewDate.getFullYear(), viewDate.getMonth(), day));
-      }
       expenses.unshift({
         id: "guest_" + Math.random().toString(36).slice(2, 10),
         amount, category, note, dateISO: expDate, createdAt: Date.now(),
@@ -2204,16 +2205,10 @@ expenseForm.addEventListener("submit", async (e) => {
 
   if (editingId) {
     const exp = expenses.find((x) => x.id === editingId);
-    if (exp) { exp.amount = amount; exp.category = category; exp.note = note; }
-    enqueueSync({ type: "UPDATE_EXPENSE", id: editingId, data: { amount, category, note } });
+    if (exp) { exp.amount = amount; exp.category = category; exp.note = note; exp.dateISO = expDate; }
+    enqueueSync({ type: "UPDATE_EXPENSE", id: editingId, data: { amount, category, note, dateISO: expDate } });
     showToast("Expense updated");
   } else {
-    const now = new Date();
-    let expDate = todayISO();
-    if (toLocalMonthPrefix(viewDate) !== toLocalMonthPrefix(now)) {
-      const day = Math.min(now.getDate(), new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate());
-      expDate = toLocalISO(new Date(viewDate.getFullYear(), viewDate.getMonth(), day));
-    }
     const newExp = {
       id: "cloud_exp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       amount, category, note, dateISO: expDate, createdAt: Date.now(),
@@ -2253,6 +2248,10 @@ function openExpenseSheet(expense) {
   $("amount").value = expense ? expense.amount : "";
   $("category").value = expense ? expense.category : "Food";
   $("note").value = expense ? expense.note || "" : "";
+  const expDateInput = $("expense-date");
+  if (expDateInput) {
+    expDateInput.value = expense ? expense.dateISO : (selectedDateISO || toLocalISO(new Date()));
+  }
   addSheet.classList.remove("hidden");
 }
 function closeExpenseSheet() {
@@ -2456,10 +2455,57 @@ function changeMonth(delta) {
   const next = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
   if (next > startOfMonth(new Date())) return; // no future months
   viewDate = next;
+  selectedDateISO = null;
+  calendarOpen = false;
+  const popover = $("calendar-popover");
+  if (popover) popover.classList.add("hidden");
   render();
 }
 $("prev-month").addEventListener("click", () => changeMonth(-1));
 $("next-month").addEventListener("click", () => changeMonth(1));
+
+// Calendar controls
+const calDropdownBtn = $("calendar-dropdown-btn");
+if (calDropdownBtn) {
+  calDropdownBtn.addEventListener("click", () => {
+    const popover = $("calendar-popover");
+    calendarOpen = !calendarOpen;
+    if (popover) popover.classList.toggle("hidden", !calendarOpen);
+    if (calendarOpen) renderCalendar();
+  });
+}
+
+const calResetBtn = $("calendar-reset-btn");
+if (calResetBtn) {
+  calResetBtn.addEventListener("click", () => {
+    viewDate = startOfMonth(new Date());
+    selectedDateISO = null;
+    calendarOpen = false;
+    const popover = $("calendar-popover");
+    if (popover) popover.classList.add("hidden");
+    render();
+  });
+}
+
+const calTodayBtn = $("calendar-today-btn");
+if (calTodayBtn) {
+  calTodayBtn.addEventListener("click", () => {
+    const realNow = new Date();
+    viewDate = startOfMonth(realNow);
+    selectedDateISO = toLocalISO(realNow);
+    render();
+  });
+}
+
+const calYearSelect = $("calendar-year-select");
+if (calYearSelect) {
+  calYearSelect.addEventListener("change", (e) => {
+    const y = parseInt(e.target.value, 10);
+    viewDate = new Date(y, viewDate.getMonth(), 1);
+    selectedDateISO = null;
+    render();
+  });
+}
 
 // ---------- Category sort + chart type controls ----------
 $("category-sort").value = categorySort;
@@ -2584,7 +2630,10 @@ async function exportCsvData() {
 // ---------- Derived data ----------
 function currentMonthData() {
   const monthPrefix = toLocalMonthPrefix(viewDate);
-  const monthExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix));
+  let monthExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix));
+  if (selectedDateISO) {
+    monthExpenses = monthExpenses.filter((e) => e.dateISO === selectedDateISO);
+  }
   const realNow = new Date();
   const isCurrentMonth = monthPrefix === toLocalMonthPrefix(realNow);
   const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
@@ -2595,44 +2644,153 @@ function currentMonthData() {
 // ---------- Rendering ----------
 function render() {
   const { monthExpenses, isCurrentMonth, daysInMonth, today } = currentMonthData();
-  const monthTotal = monthExpenses.reduce((s, e) => s + e.amount, 0);
+  const monthPrefix = toLocalMonthPrefix(viewDate);
+  const allMonthExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix));
+  const monthTotal = allMonthExpenses.reduce((s, e) => s + e.amount, 0);
 
-  $("month-label").textContent = monthLabelFmt.format(viewDate);
-  $("month-total").textContent = fmt(monthTotal);
+  const realNow = new Date();
+  const todayISO = toLocalISO(realNow);
+
+  const monthLabelEl = $("month-label");
+  const monthLabelBtn = $("calendar-dropdown-btn");
+  const resetBtn = $("calendar-reset-btn");
+
+  if (selectedDateISO) {
+    const [y, m, d] = selectedDateISO.split("-").map((n) => parseInt(n, 10));
+    const selDate = new Date(y, m - 1, d);
+    if (monthLabelEl) monthLabelEl.textContent = dayLabelFmt.format(selDate);
+    if (monthLabelBtn) monthLabelBtn.classList.add("filtered");
+    if (resetBtn) resetBtn.classList.toggle("hidden", selectedDateISO === todayISO && toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow));
+  } else {
+    if (monthLabelEl) monthLabelEl.textContent = monthLabelFmt.format(viewDate);
+    if (monthLabelBtn) monthLabelBtn.classList.remove("filtered");
+    if (resetBtn) resetBtn.classList.toggle("hidden", toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow));
+  }
+
   $("next-month").disabled = viewDate >= startOfMonth(new Date());
 
-  renderBudgetBar(monthTotal);
+  renderSummaryCard(monthTotal);
   renderCategories(monthExpenses);
   renderExpenseList(monthExpenses);
-  renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today);
+  renderForecast(allMonthExpenses, isCurrentMonth, daysInMonth, today);
+  if (calendarOpen) renderCalendar();
 }
 
-function renderBudgetBar(spent) {
-  const barWrap = $("budget-bar-wrap");
-  if (!barWrap) return;
+function renderSummaryCard(spent) {
+  const summarySpent = $("summary-spent");
+  const summaryBudget = $("summary-budget");
+  const summaryRemaining = $("summary-remaining");
+  const summaryRemainingLabel = $("summary-remaining-label");
+  const progressFill = $("budget-progress-fill");
+
+  if (summarySpent) summarySpent.textContent = fmt(spent);
 
   if (monthlyBudget > 0) {
-    barWrap.classList.remove("hidden");
-    const percent = Math.min(100, Math.max(0, (spent / monthlyBudget) * 100));
+    if (summaryBudget) summaryBudget.textContent = fmt(monthlyBudget);
     const remaining = monthlyBudget - spent;
-    const remainingText = $("budget-remaining-text");
-    const fill = $("budget-progress-fill");
-
-    $("budget-status-text").textContent = `Spent ${fmt(spent)} of ${fmt(monthlyBudget)} budget`;
-
-    if (remaining >= 0) {
-      remainingText.textContent = `${fmt(remaining)} left`;
-      remainingText.classList.remove("over");
-      fill.classList.remove("over");
+    if (remaining < 0) {
+      if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Over";
+      if (summaryRemaining) {
+        summaryRemaining.textContent = fmt(Math.abs(remaining));
+        summaryRemaining.className = "summary-stat-value warn";
+      }
+      if (progressFill) {
+        progressFill.style.width = "100%";
+        progressFill.className = "budget-progress-fill over";
+      }
     } else {
-      remainingText.textContent = `${fmt(Math.abs(remaining))} over budget`;
-      remainingText.classList.add("over");
-      fill.classList.add("over");
+      if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+      if (summaryRemaining) {
+        summaryRemaining.textContent = fmt(remaining);
+        summaryRemaining.className = "summary-stat-value safe";
+      }
+      const percent = Math.min(100, Math.max(0, (spent / monthlyBudget) * 100));
+      if (progressFill) {
+        progressFill.style.width = `${percent}%`;
+        progressFill.className = "budget-progress-fill";
+      }
     }
-
-    fill.style.width = `${percent}%`;
   } else {
-    barWrap.classList.add("hidden");
+    if (summaryBudget) summaryBudget.textContent = "$0.00";
+    if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+    if (summaryRemaining) {
+      summaryRemaining.textContent = "N/A";
+      summaryRemaining.className = "summary-stat-value";
+    }
+    if (progressFill) {
+      progressFill.style.width = "0%";
+      progressFill.className = "budget-progress-fill";
+    }
+  }
+}
+
+function renderCalendar() {
+  const popover = $("calendar-popover");
+  if (!popover || popover.classList.contains("hidden")) return;
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const monthTitle = $("calendar-month-title");
+  if (monthTitle) monthTitle.textContent = monthLabelFmt.format(viewDate);
+
+  const yearSelect = $("calendar-year-select");
+  if (yearSelect && yearSelect.children.length === 0) {
+    const curYear = new Date().getFullYear();
+    for (let y = curYear - 5; y <= curYear + 5; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      yearSelect.appendChild(opt);
+    }
+  }
+  if (yearSelect) yearSelect.value = year;
+
+  const daysGrid = $("calendar-grid-days");
+  if (!daysGrid) return;
+  daysGrid.innerHTML = "";
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevMonthDays = new Date(year, month, 0).getDate();
+
+  const realNow = new Date();
+  const todayISO = toLocalISO(realNow);
+
+  const monthPrefix = toLocalMonthPrefix(viewDate);
+  const expenseDatesSet = new Set(
+    expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix)).map((e) => e.dateISO)
+  );
+
+  for (let i = firstDay - 1; i >= 0; i--) {
+    const btn = document.createElement("button");
+    btn.className = "calendar-day-cell other-month";
+    btn.textContent = prevMonthDays - i;
+    btn.type = "button";
+    daysGrid.appendChild(btn);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateISO = toLocalISO(dateObj);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "calendar-day-cell";
+    btn.textContent = d;
+
+    if (dateISO === todayISO) btn.classList.add("today");
+    if (dateISO === selectedDateISO) btn.classList.add("selected");
+    if (expenseDatesSet.has(dateISO)) btn.classList.add("has-expenses");
+
+    btn.addEventListener("click", () => {
+      if (selectedDateISO === dateISO) {
+        selectedDateISO = null;
+      } else {
+        selectedDateISO = dateISO;
+      }
+      render();
+    });
+
+    daysGrid.appendChild(btn);
   }
 }
 
