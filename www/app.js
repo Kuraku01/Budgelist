@@ -345,9 +345,21 @@ document.addEventListener("scroll", (e) => {
   });
 }, true);
 
-document.addEventListener("click", () => closeAllCustomSelects());
+document.addEventListener("click", (e) => {
+  closeAllCustomSelects();
+  if (calendarOpen && e) {
+    const popover = $("calendar-popover");
+    const dropBtn = $("calendar-dropdown-btn");
+    if (popover && dropBtn && !popover.contains(e.target) && !dropBtn.contains(e.target)) {
+      closeCalendar(true);
+    }
+  }
+});
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeAllCustomSelects();
+  if (e.key === "Escape") {
+    closeAllCustomSelects();
+    if (calendarOpen) closeCalendar(true);
+  }
 });
 
 try {
@@ -2468,17 +2480,58 @@ budgetBtn.addEventListener("click", () => {
 });
 $("cancel-budget").addEventListener("click", () => budgetSheet.classList.add("hidden"));
 
-// ---------- Month navigation ----------
+// ---------- Month navigation & Calendar popover controls ----------
 const monthLabelFmt = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
+let closeCalendarTimer = null;
+
+function openCalendar() {
+  const popover = $("calendar-popover");
+  if (!popover) return;
+  if (closeCalendarTimer) {
+    clearTimeout(closeCalendarTimer);
+    closeCalendarTimer = null;
+  }
+  calendarOpen = true;
+  popover.classList.remove("hidden", "closing");
+  popover.classList.add("opening");
+
+  const grid = $("calendar-grid-days");
+  if (grid) grid.classList.add("animate-enter");
+
+  renderCalendar();
+}
+
+function closeCalendar(animate = true) {
+  const popover = $("calendar-popover");
+  if (!popover) return;
+  calendarOpen = false;
+
+  if (animate && !popover.classList.contains("hidden")) {
+    popover.classList.remove("opening");
+    popover.classList.add("closing");
+    if (closeCalendarTimer) clearTimeout(closeCalendarTimer);
+    closeCalendarTimer = setTimeout(() => {
+      popover.classList.add("hidden");
+      popover.classList.remove("closing");
+      closeCalendarTimer = null;
+    }, 180);
+  } else {
+    popover.classList.add("hidden");
+    popover.classList.remove("opening", "closing");
+  }
+}
+
+function toggleCalendar() {
+  if (calendarOpen) closeCalendar(true);
+  else openCalendar();
+}
 
 function changeMonth(delta) {
   const next = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
   if (next > startOfMonth(new Date())) return; // no future months
   viewDate = next;
   selectedDateISO = null;
-  calendarOpen = false;
-  const popover = $("calendar-popover");
-  if (popover) popover.classList.add("hidden");
+  closeCalendar(true);
   render();
 }
 $("prev-month").addEventListener("click", () => changeMonth(-1));
@@ -2487,11 +2540,9 @@ $("next-month").addEventListener("click", () => changeMonth(1));
 // Calendar controls
 const calDropdownBtn = $("calendar-dropdown-btn");
 if (calDropdownBtn) {
-  calDropdownBtn.addEventListener("click", () => {
-    const popover = $("calendar-popover");
-    calendarOpen = !calendarOpen;
-    if (popover) popover.classList.toggle("hidden", !calendarOpen);
-    if (calendarOpen) renderCalendar();
+  calDropdownBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleCalendar();
   });
 }
 
@@ -2500,9 +2551,7 @@ if (calResetBtn) {
   calResetBtn.addEventListener("click", () => {
     viewDate = startOfMonth(new Date());
     selectedDateISO = null;
-    calendarOpen = false;
-    const popover = $("calendar-popover");
-    if (popover) popover.classList.add("hidden");
+    closeCalendar(true);
     render();
   });
 }
@@ -2523,6 +2572,8 @@ if (calMonthSelect) {
     const m = parseInt(e.target.value, 10);
     viewDate = new Date(viewDate.getFullYear(), m, 1);
     selectedDateISO = null;
+    const grid = $("calendar-grid-days");
+    if (grid) grid.classList.add("animate-enter");
     render();
   });
 }
@@ -2533,6 +2584,8 @@ if (calYearSelect) {
     const y = parseInt(e.target.value, 10);
     viewDate = new Date(y, viewDate.getMonth(), 1);
     selectedDateISO = null;
+    const grid = $("calendar-grid-days");
+    if (grid) grid.classList.add("animate-enter");
     render();
   });
 }
