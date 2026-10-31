@@ -349,8 +349,8 @@ document.addEventListener("click", (e) => {
   closeAllCustomSelects();
   if (calendarOpen && e) {
     const popover = $("calendar-popover");
-    const dropBtn = $("calendar-dropdown-btn");
-    if (popover && dropBtn && !popover.contains(e.target) && !dropBtn.contains(e.target)) {
+    const monthNav = $("month-nav");
+    if (popover && !popover.contains(e.target) && monthNav && !monthNav.contains(e.target)) {
       closeCalendar(true);
     }
   }
@@ -2531,11 +2531,18 @@ function changeMonth(delta) {
   if (next > startOfMonth(new Date())) return; // no future months
   viewDate = next;
   selectedDateISO = null;
-  closeCalendar(true);
+  const grid = $("calendar-grid-days");
+  if (grid) grid.classList.add("animate-enter");
   render();
 }
-$("prev-month").addEventListener("click", () => changeMonth(-1));
-$("next-month").addEventListener("click", () => changeMonth(1));
+$("prev-month").addEventListener("click", (e) => {
+  e.stopPropagation();
+  changeMonth(-1);
+});
+$("next-month").addEventListener("click", (e) => {
+  e.stopPropagation();
+  changeMonth(1);
+});
 
 // Calendar controls
 const calDropdownBtn = $("calendar-dropdown-btn");
@@ -2548,20 +2555,13 @@ if (calDropdownBtn) {
 
 const calResetBtn = $("calendar-reset-btn");
 if (calResetBtn) {
-  calResetBtn.addEventListener("click", () => {
-    viewDate = startOfMonth(new Date());
-    selectedDateISO = null;
-    closeCalendar(true);
-    render();
-  });
-}
-
-const calTodayBtn = $("calendar-today-btn");
-if (calTodayBtn) {
-  calTodayBtn.addEventListener("click", () => {
+  calResetBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
     const realNow = new Date();
     viewDate = startOfMonth(realNow);
-    selectedDateISO = toLocalISO(realNow);
+    selectedDateISO = null;
+    const grid = $("calendar-grid-days");
+    if (grid) grid.classList.add("animate-enter");
     render();
   });
 }
@@ -2756,7 +2756,33 @@ function render() {
   renderCategories(monthExpenses);
   renderExpenseList(monthExpenses);
   renderForecast(allMonthExpenses, isCurrentMonth, daysInMonth, today);
+  renderDayFilterBanner();
   if (calendarOpen) renderCalendar();
+}
+
+const dayFullLabelFmt = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", year: "numeric" });
+
+function renderDayFilterBanner() {
+  const banner = $("day-filter-banner");
+  const textEl = $("day-filter-text");
+  if (!banner) return;
+
+  if (selectedDateISO) {
+    const [y, m, d] = selectedDateISO.split("-").map((n) => parseInt(n, 10));
+    const selDate = new Date(y, m - 1, d);
+    if (textEl) textEl.textContent = dayFullLabelFmt.format(selDate);
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+
+const clearDayFilterBtn = $("clear-day-filter-btn");
+if (clearDayFilterBtn) {
+  clearDayFilterBtn.addEventListener("click", () => {
+    selectedDateISO = null;
+    render();
+  });
 }
 
 function renderSummaryCard(spent) {
@@ -2914,7 +2940,6 @@ function renderCategories(monthExpenses) {
   CATEGORIES.forEach((c) => (sums[c] = 0));
   monthExpenses.forEach((e) => (sums[e.category] = (sums[e.category] || 0) + e.amount));
   const total = Object.values(sums).reduce((a, b) => a + b, 0);
-  const max = Math.max(1, ...Object.values(sums));
   const entries = sortedCategoryEntries(sums);
 
   $("category-list").innerHTML = entries.map(({ cat, amount }) => {
@@ -2926,8 +2951,8 @@ function renderCategories(monthExpenses) {
     <div class="category-row">
       <span class="cat-dot" style="background:${safeColor}"></span>
       <span class="cat-name">${safeCat}</span>
-      <span class="cat-bar-track">
-        <span class="cat-bar-fill" style="width:${(amount / max) * 100}%;background:${safeColor}"></span>
+      <span class="cat-bar-track" title="${pct}% of month spend">
+        <span class="cat-bar-fill" style="width:${pct}%;background:${safeColor}"></span>
       </span>
       <span class="cat-amount">${safeAmount}</span>
       <span class="cat-percent">${pct}%</span>

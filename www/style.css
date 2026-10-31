@@ -696,7 +696,52 @@ select:focus {
 }
 
 .calendar-day-cell.other-month {
-  opacity: 0.3;
+  opacity: 0.35;
+  background: rgba(0, 0, 0, 0.2) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* Specific Day Filter Banner */
+.day-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  animation: bannerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.day-filter-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.day-filter-info svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.day-filter-info strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+@keyframes bannerSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .calendar-day-cell.today {
@@ -847,10 +892,10 @@ select:focus {
 .category-row .cat-name { width: 66px; flex-shrink: 0; font-weight: 500; }
 
 .category-row .cat-bar-track {
-  flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden;
+  flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;
 }
 
-.category-row .cat-bar-fill { height: 100%; border-radius: 4px; }
+.category-row .cat-bar-fill { height: 100%; border-radius: 4px; transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease; }
 
 .category-row .cat-amount {
   width: 58px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;
