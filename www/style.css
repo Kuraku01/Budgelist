@@ -591,6 +591,19 @@ select:focus {
   padding: 16px;
   margin-bottom: 16px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  transform-origin: top center;
+  animation: calendarPopIn 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes calendarPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .calendar-popover-head {
@@ -634,13 +647,30 @@ select:focus {
   cursor: pointer;
   color: var(--ink);
   position: relative;
-  transition: all 0.15s ease;
+  transition: background 0.2s ease, transform 0.15s cubic-bezier(0.2, 0.8, 0.4, 1.2), color 0.2s ease, border-color 0.2s ease;
   background: transparent;
   border: none;
+  animation: dayCellEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dayCellEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .calendar-day-cell:hover {
   background: var(--bg);
+  transform: scale(1.08);
+}
+
+.calendar-day-cell:active {
+  transform: scale(0.92);
 }
 
 .calendar-day-cell.other-month {
@@ -650,12 +680,35 @@ select:focus {
 .calendar-day-cell.today {
   border: 1.5px solid var(--primary);
   color: var(--primary);
+  animation: todayGlow 2.5s infinite ease-in-out, dayCellEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes todayGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0);
+  }
 }
 
 .calendar-day-cell.selected {
   background: var(--primary) !important;
   color: #ffffff !important;
   font-weight: 700;
+  animation: cellSelectPulse 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes cellSelectPulse {
+  0% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .calendar-day-cell.has-expenses::after {
@@ -663,6 +716,19 @@ select:focus {
   width: 4px;
   height: 4px;
   background: var(--primary);
+  border-radius: 50%;
+  position: absolute;
+  bottom: 3px;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.calendar-day-cell:hover.has-expenses::after {
+  transform: scale(1.3);
+}
+
+.calendar-day-cell.selected.has-expenses::after {
+  background: #ffffff;
+}
   border-radius: 50%;
   position: absolute;
   bottom: 3px;

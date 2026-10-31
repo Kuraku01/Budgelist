@@ -2517,6 +2517,16 @@ if (calTodayBtn) {
   });
 }
 
+const calMonthSelect = $("calendar-month-select");
+if (calMonthSelect) {
+  calMonthSelect.addEventListener("change", (e) => {
+    const m = parseInt(e.target.value, 10);
+    viewDate = new Date(viewDate.getFullYear(), m, 1);
+    selectedDateISO = null;
+    render();
+  });
+}
+
 const calYearSelect = $("calendar-year-select");
 if (calYearSelect) {
   calYearSelect.addEventListener("change", (e) => {
@@ -2744,7 +2754,39 @@ function renderSummaryCard(spent) {
   }
 }
 
+function populateYearSelect() {
+  const yearSelect = $("calendar-year-select");
+  if (!yearSelect) return;
+  const curYear = new Date().getFullYear();
+  const selectedYear = viewDate.getFullYear();
+  const minYear = Math.min(curYear - 10, selectedYear - 3);
+  const maxYear = Math.max(curYear + 5, selectedYear + 3);
+
+  let exists = false;
+  for (let i = 0; i < yearSelect.options.length; i++) {
+    if (parseInt(yearSelect.options[i].value, 10) === selectedYear) {
+      exists = true;
+      break;
+    }
+  }
+
+  if (yearSelect.children.length === 0 || !exists) {
+    yearSelect.innerHTML = "";
+    for (let y = minYear; y <= maxYear; y++) {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      yearSelect.appendChild(opt);
+    }
+  }
+  yearSelect.value = selectedYear;
+}
+
 function renderCalendar() {
+  populateYearSelect();
+  const monthSelect = $("calendar-month-select");
+  if (monthSelect) monthSelect.value = viewDate.getMonth();
+
   const popover = $("calendar-popover");
   if (!popover || popover.classList.contains("hidden")) return;
 
@@ -2752,18 +2794,6 @@ function renderCalendar() {
   const month = viewDate.getMonth();
   const monthTitle = $("calendar-month-title");
   if (monthTitle) monthTitle.textContent = monthLabelFmt.format(viewDate);
-
-  const yearSelect = $("calendar-year-select");
-  if (yearSelect && yearSelect.children.length === 0) {
-    const curYear = new Date().getFullYear();
-    for (let y = curYear - 5; y <= curYear + 5; y++) {
-      const opt = document.createElement("option");
-      opt.value = y;
-      opt.textContent = y;
-      yearSelect.appendChild(opt);
-    }
-  }
-  if (yearSelect) yearSelect.value = year;
 
   const daysGrid = $("calendar-grid-days");
   if (!daysGrid) return;
@@ -2781,11 +2811,14 @@ function renderCalendar() {
     expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix)).map((e) => e.dateISO)
   );
 
+  let cellIdx = 0;
   for (let i = firstDay - 1; i >= 0; i--) {
     const btn = document.createElement("button");
     btn.className = "calendar-day-cell other-month";
     btn.textContent = prevMonthDays - i;
     btn.type = "button";
+    btn.style.animationDelay = `${cellIdx * 0.006}s`;
+    cellIdx++;
     daysGrid.appendChild(btn);
   }
 
@@ -2796,6 +2829,8 @@ function renderCalendar() {
     btn.type = "button";
     btn.className = "calendar-day-cell";
     btn.textContent = d;
+    btn.style.animationDelay = `${cellIdx * 0.006}s`;
+    cellIdx++;
 
     if (dateISO === todayISO) btn.classList.add("today");
     if (dateISO === selectedDateISO) btn.classList.add("selected");
