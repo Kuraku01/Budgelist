@@ -895,7 +895,7 @@ select:focus {
   flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;
 }
 
-.category-row .cat-bar-fill { height: 100%; border-radius: 4px; transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease; }
+.category-row .cat-bar-fill { display: block; height: 100%; border-radius: 4px; transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease; }
 
 .category-row .cat-amount {
   width: 58px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;

@@ -2944,6 +2944,7 @@ function renderCategories(monthExpenses) {
 
   $("category-list").innerHTML = entries.map(({ cat, amount }) => {
     const pct = total > 0 ? Math.round((amount / total) * 100) : 0;
+    const barWidth = pct > 0 ? Math.max(3, pct) : 0;
     const safeCat = escapeHtml(cat);
     const safeAmount = escapeHtml(fmt(amount));
     const safeColor = escapeHtml(catColor(cat));
@@ -2952,7 +2953,7 @@ function renderCategories(monthExpenses) {
       <span class="cat-dot" style="background:${safeColor}"></span>
       <span class="cat-name">${safeCat}</span>
       <span class="cat-bar-track" title="${pct}% of month spend">
-        <span class="cat-bar-fill" style="width:${pct}%;background:${safeColor}"></span>
+        <span class="cat-bar-fill" style="width:${barWidth}%;background:${safeColor}"></span>
       </span>
       <span class="cat-amount">${safeAmount}</span>
       <span class="cat-percent">${pct}%</span>
