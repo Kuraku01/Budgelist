@@ -36,6 +36,10 @@ public class MainActivity extends BridgeActivity {
         @JavascriptInterface
         public boolean saveCsv(String filename, String csvContent) {
             try {
+                if (filename == null || filename.isEmpty()
+                        || filename.contains("..") || filename.contains("/") || filename.contains("\\")) {
+                    throw new IllegalArgumentException("Invalid filename");
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     ContentValues values = new ContentValues();
                     values.put(MediaStore.MediaColumns.DISPLAY_NAME, filename);
@@ -57,6 +61,10 @@ public class MainActivity extends BridgeActivity {
                         downloadsDir.mkdirs();
                     }
                     java.io.File file = new java.io.File(downloadsDir, filename);
+                    String canonicalDir = downloadsDir.getCanonicalPath() + java.io.File.separator;
+                    if (!file.getCanonicalPath().startsWith(canonicalDir)) {
+                        throw new SecurityException("Invalid filename");
+                    }
                     try (java.io.FileOutputStream fos = new java.io.FileOutputStream(file)) {
                         fos.write(csvContent.getBytes(StandardCharsets.UTF_8));
                         fos.flush();
