@@ -131,6 +131,50 @@ function startOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function catColor(cat) { return getComputedStyle(document.documentElement).getPropertyValue(CAT_VAR[cat] || CAT_VAR.Other).trim(); }
 
 // ---------- Modern Custom Select Component ----------
+function buildCustomSelectOptions(selectEl, optionsUl) {
+  if (!selectEl || !optionsUl) return;
+  optionsUl.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  Array.from(selectEl.options).forEach((optEl) => {
+    const li = document.createElement("li");
+    li.className = "custom-select-option";
+    const optVal = optEl.value || optEl.text;
+    li.dataset.value = optVal;
+
+    const optLeft = document.createElement("div");
+    optLeft.className = "option-left";
+
+    if (CAT_VAR[optVal]) {
+      const optDot = document.createElement("span");
+      optDot.className = "custom-select-dot";
+      optDot.style.background = catColor(optVal);
+      optLeft.appendChild(optDot);
+    }
+
+    const optText = document.createElement("span");
+    optText.textContent = optEl.text;
+    optLeft.appendChild(optText);
+
+    const optCheck = document.createElement("span");
+    optCheck.className = "option-check";
+    optCheck.textContent = "✓";
+
+    li.appendChild(optLeft);
+    li.appendChild(optCheck);
+
+    li.addEventListener("click", (e) => {
+      e.stopPropagation();
+      selectEl.value = optVal;
+      selectEl.dispatchEvent(new Event("change", { bubbles: true }));
+      syncCustomSelect(selectEl);
+      closeAllCustomSelects();
+    });
+
+    frag.appendChild(li);
+  });
+  optionsUl.appendChild(frag);
+}
+
 function syncCustomSelect(selectEl) {
   if (!selectEl) return;
   const parent = selectEl.parentNode;
@@ -138,6 +182,25 @@ function syncCustomSelect(selectEl) {
 
   const wrapper = parent.querySelector(`.custom-select-wrapper[data-for="${selectEl.id || ''}"]`);
   if (!wrapper) return;
+
+  const optionsUl = wrapper.querySelector(".custom-select-options");
+  if (optionsUl) {
+    const currentItems = optionsUl.querySelectorAll(".custom-select-option");
+    let needsRebuild = currentItems.length !== selectEl.options.length;
+    if (!needsRebuild && currentItems.length > 0) {
+      const firstOpt = selectEl.options[0];
+      const lastOpt = selectEl.options[selectEl.options.length - 1];
+      if (
+        currentItems[0].dataset.value !== String(firstOpt.value || firstOpt.text) ||
+        currentItems[currentItems.length - 1].dataset.value !== String(lastOpt.value || lastOpt.text)
+      ) {
+        needsRebuild = true;
+      }
+    }
+    if (needsRebuild) {
+      buildCustomSelectOptions(selectEl, optionsUl);
+    }
+  }
 
   const selectedOpt = selectEl.options[selectEl.selectedIndex] || selectEl.options[0];
   if (!selectedOpt) return;
@@ -212,43 +275,7 @@ function initCustomSelects() {
     optionsUl.className = "custom-select-options";
     optionsUl.setAttribute("role", "listbox");
 
-    Array.from(selectEl.options).forEach((optEl) => {
-      const li = document.createElement("li");
-      li.className = "custom-select-option";
-      const optVal = optEl.value || optEl.text;
-      li.dataset.value = optVal;
-
-      const optLeft = document.createElement("div");
-      optLeft.className = "option-left";
-
-      if (CAT_VAR[optVal]) {
-        const optDot = document.createElement("span");
-        optDot.className = "custom-select-dot";
-        optDot.style.background = catColor(optVal);
-        optLeft.appendChild(optDot);
-      }
-
-      const optText = document.createElement("span");
-      optText.textContent = optEl.text;
-      optLeft.appendChild(optText);
-
-      const optCheck = document.createElement("span");
-      optCheck.className = "option-check";
-      optCheck.textContent = "✓";
-
-      li.appendChild(optLeft);
-      li.appendChild(optCheck);
-
-      li.addEventListener("click", (e) => {
-        e.stopPropagation();
-        selectEl.value = optVal;
-        selectEl.dispatchEvent(new Event("change", { bubbles: true }));
-        syncCustomSelect(selectEl);
-        closeAllCustomSelects();
-      });
-
-      optionsUl.appendChild(li);
-    });
+    buildCustomSelectOptions(selectEl, optionsUl);
 
     dropdown.appendChild(optionsUl);
     wrapper.appendChild(trigger);
@@ -264,6 +291,10 @@ function initCustomSelects() {
         positionCustomSelect(wrapper, trigger, dropdown);
         wrapper.classList.add("open");
         trigger.setAttribute("aria-expanded", "true");
+        const selLi = optionsUl.querySelector(".custom-select-option.selected");
+        if (selLi && typeof selLi.scrollIntoView === "function") {
+          selLi.scrollIntoView({ block: "nearest" });
+        }
       }
     });
 
