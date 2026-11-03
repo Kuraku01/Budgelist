@@ -1,4 +1,4 @@
-// OTA Bundle Build Key: v0.1.2-beta
+// OTA Bundle Build Key: v0.2.0-beta
 const {
   firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
@@ -392,11 +392,18 @@ document.addEventListener("click", (e) => {
       closeCalendar(true);
     }
   }
+  if (typeof expCalOpen !== "undefined" && expCalOpen && e) {
+    const expPicker = $("expense-date-picker");
+    if (expPicker && !expPicker.contains(e.target)) {
+      closeExpenseCalendar(true);
+    }
+  }
 });
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeAllCustomSelects();
     if (calendarOpen) closeCalendar(true);
+    if (typeof expCalOpen !== "undefined" && expCalOpen) closeExpenseCalendar(true);
   }
 });
 
@@ -695,8 +702,20 @@ function applyTheme(theme) {
     $("settings-dark-toggle").checked = (theme === "dark");
   }
 }
+
+function applyColorTheme(colorTheme) {
+  const validThemes = ["violet", "emerald", "ocean", "rose", "sunset", "slate"];
+  const normalized = validThemes.includes(colorTheme) ? colorTheme : "violet";
+  document.documentElement.setAttribute("data-color-theme", normalized);
+  safeSet("budgelist-color-theme", normalized);
+  document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.colorTheme === normalized);
+  });
+}
+
 applyTheme(safeGet("budgelist-theme") ||
   (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
+applyColorTheme(safeGet("budgelist-color-theme") || "violet");
 
 $("theme-toggle").addEventListener("click", () => {
   const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -1166,6 +1185,10 @@ function openSettingsSheet() {
 
   const isDark = document.documentElement.getAttribute("data-theme") === "dark";
   $("settings-dark-toggle").checked = isDark;
+  const activeColorTheme = document.documentElement.getAttribute("data-color-theme") || safeGet("budgelist-color-theme") || "violet";
+  document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.colorTheme === activeColorTheme);
+  });
   $("settings-auto-sync-toggle").checked = autoSyncVal;
 
   $("settings-sheet").classList.remove("hidden");
@@ -1703,6 +1726,14 @@ $("settings-dark-toggle").addEventListener("change", (e) => {
   render();
 });
 
+document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const selected = btn.dataset.colorTheme || "violet";
+    applyColorTheme(selected);
+    render();
+  });
+});
+
 $("settings-auto-sync-toggle").addEventListener("change", (e) => {
   safeSet(cacheKey("auto-sync"), String(e.target.checked));
   showToast(e.target.checked ? "Auto sync enabled" : "Manual sync enabled");
@@ -1723,7 +1754,7 @@ document.querySelectorAll(".accordion-header").forEach((header) => {
   });
 });
 
-const APP_VERSION = "0.1.2-beta";
+const APP_VERSION = "0.2.0-beta";
 const GITHUB_REPO = "kuraku01/budgelist";
 let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
 let currentLatestTag = "";
@@ -1839,13 +1870,11 @@ function showUpdateModal(latestTag, downloadUrl, isForced = false) {
 }
 
 async function nativeFetch(url, options = {}) {
-  console.log("[OTA-DEBUG] nativeFetch called for URL:", url);
   const capPlugins = window.Capacitor && window.Capacitor.Plugins;
   const capHttp = (capPlugins && capPlugins.CapacitorHttp) || (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
 
   if (capHttp && (typeof capHttp.get === "function" || typeof capHttp.request === "function")) {
     try {
-      console.log("[OTA-DEBUG] Invoking capHttp for URL:", url);
       const isArrayBuffer = options.responseType === "arraybuffer" || options.isBlob;
       const fn = typeof capHttp.get === "function" ? capHttp.get.bind(capHttp) : capHttp.request.bind(capHttp);
       const res = await fn({
@@ -1855,7 +1884,6 @@ async function nativeFetch(url, options = {}) {
         responseType: isArrayBuffer ? "arraybuffer" : "text"
       });
 
-      console.log("[OTA-DEBUG] capHttp result status:", res && res.status);
       if (res && res.status >= 200 && res.status < 300) {
         let rawData = res.data;
         if (isArrayBuffer && typeof rawData === "string") {
@@ -1883,11 +1911,10 @@ async function nativeFetch(url, options = {}) {
         };
       }
     } catch (e) {
-      console.warn("[OTA-DEBUG] capHttp failed:", e);
+      console.warn("[OTA] CapacitorHttp request failed, falling back to fetch:", e);
     }
   }
 
-  console.log("[OTA-DEBUG] Falling back to window.fetch for URL:", url);
   return fetch(url, options);
 }
 
@@ -2622,6 +2649,188 @@ $("delete-expense-btn").addEventListener("click", async () => {
   showToast("Expense deleted");
 });
 
+// ---------- Custom Expense Date Picker Calendar ----------
+let expCalViewDate = startOfMonth(new Date());
+let expCalOpen = false;
+let closeExpCalTimer = null;
+
+function setExpenseDateValue(dateISO) {
+  const safeISO = dateISO || todayISO();
+  const expDateInput = $("expense-date");
+  if (expDateInput) expDateInput.value = safeISO;
+
+  const [y, m, d] = safeISO.split("-").map((n) => parseInt(n, 10));
+  if (y && m && d) {
+    const dObj = new Date(y, m - 1, d);
+    expCalViewDate = new Date(y, m - 1, 1);
+    const triggerText = $("expense-date-trigger-text");
+    if (triggerText) {
+      triggerText.textContent = safeISO === todayISO()
+        ? `Today · ${dayLabelFmt.format(dObj)}`
+        : dayFullLabelFmt.format(dObj);
+    }
+  }
+  if (expCalOpen) renderExpenseCalendar();
+}
+
+function openExpenseCalendar() {
+  const picker = $("expense-date-picker");
+  const popover = $("expense-date-popover");
+  const trigger = $("expense-date-trigger");
+  if (!popover || !picker) return;
+  if (closeExpCalTimer) {
+    clearTimeout(closeExpCalTimer);
+    closeExpCalTimer = null;
+  }
+  const curVal = $("expense-date") && $("expense-date").value ? $("expense-date").value : todayISO();
+  const [y, m] = curVal.split("-").map((n) => parseInt(n, 10));
+  if (y && m) expCalViewDate = new Date(y, m - 1, 1);
+
+  expCalOpen = true;
+  picker.classList.add("open");
+  if (trigger) trigger.setAttribute("aria-expanded", "true");
+  popover.classList.remove("hidden", "closing");
+  popover.classList.add("opening");
+
+  const grid = $("expense-calendar-grid-days");
+  if (grid) grid.classList.add("animate-enter");
+  renderExpenseCalendar();
+}
+
+function closeExpenseCalendar(animate = true) {
+  const picker = $("expense-date-picker");
+  const popover = $("expense-date-popover");
+  const trigger = $("expense-date-trigger");
+  if (!popover || !picker) return;
+  expCalOpen = false;
+  picker.classList.remove("open");
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+
+  if (animate && !popover.classList.contains("hidden")) {
+    popover.classList.remove("opening");
+    popover.classList.add("closing");
+    if (closeExpCalTimer) clearTimeout(closeExpCalTimer);
+    closeExpCalTimer = setTimeout(() => {
+      popover.classList.add("hidden");
+      popover.classList.remove("closing");
+      closeExpCalTimer = null;
+    }, 180);
+  } else {
+    popover.classList.add("hidden");
+    popover.classList.remove("opening", "closing");
+  }
+}
+
+function renderExpenseCalendar() {
+  populateYearSelectElement($("exp-cal-year-select"), expCalViewDate.getFullYear());
+  const monthSel = $("exp-cal-month-select");
+  if (monthSel) monthSel.value = expCalViewDate.getMonth();
+
+  const { min: calMin, max: calMax } = calendarBounds();
+  if ($("exp-cal-prev")) $("exp-cal-prev").disabled = expCalViewDate <= calMin;
+  if ($("exp-cal-next")) $("exp-cal-next").disabled = expCalViewDate >= calMax;
+
+  const daysGrid = $("expense-calendar-grid-days");
+  if (!daysGrid) return;
+  daysGrid.innerHTML = "";
+
+  const year = expCalViewDate.getFullYear();
+  const month = expCalViewDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const prevMonthDays = new Date(year, month, 0).getDate();
+
+  const curTodayISO = todayISO();
+  const currentPickedISO = $("expense-date") ? $("expense-date").value : curTodayISO;
+  const monthPrefix = toLocalMonthPrefix(expCalViewDate);
+  const expenseDatesSet = new Set(
+    expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix)).map((e) => e.dateISO)
+  );
+
+  let cellIdx = 0;
+  for (let i = firstDay - 1; i >= 0; i--) {
+    const btn = document.createElement("button");
+    btn.className = "calendar-day-cell other-month";
+    btn.textContent = prevMonthDays - i;
+    btn.type = "button";
+    btn.style.animationDelay = `${cellIdx * 0.005}s`;
+    cellIdx++;
+    daysGrid.appendChild(btn);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateObj = new Date(year, month, d);
+    const dateISO = toLocalISO(dateObj);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "calendar-day-cell";
+    btn.textContent = d;
+    btn.style.animationDelay = `${cellIdx * 0.005}s`;
+    cellIdx++;
+
+    if (dateISO === curTodayISO) btn.classList.add("today");
+    if (dateISO === currentPickedISO) btn.classList.add("selected");
+    if (expenseDatesSet.has(dateISO)) btn.classList.add("has-expenses");
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setExpenseDateValue(dateISO);
+      closeExpenseCalendar(true);
+    });
+
+    daysGrid.appendChild(btn);
+  }
+}
+
+if ($("expense-date-trigger")) {
+  $("expense-date-trigger").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (expCalOpen) closeExpenseCalendar(true);
+    else openExpenseCalendar();
+  });
+}
+if ($("exp-cal-prev")) {
+  $("exp-cal-prev").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const next = new Date(expCalViewDate.getFullYear(), expCalViewDate.getMonth() - 1, 1);
+    const { min } = calendarBounds();
+    if (next < min) return;
+    expCalViewDate = next;
+    renderExpenseCalendar();
+  });
+}
+if ($("exp-cal-next")) {
+  $("exp-cal-next").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const next = new Date(expCalViewDate.getFullYear(), expCalViewDate.getMonth() + 1, 1);
+    const { max } = calendarBounds();
+    if (next > max) return;
+    expCalViewDate = next;
+    renderExpenseCalendar();
+  });
+}
+if ($("exp-cal-today-btn")) {
+  $("exp-cal-today-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    setExpenseDateValue(todayISO());
+    closeExpenseCalendar(true);
+  });
+}
+if ($("exp-cal-month-select")) {
+  $("exp-cal-month-select").addEventListener("change", (e) => {
+    const m = parseInt(e.target.value, 10);
+    expCalViewDate = new Date(expCalViewDate.getFullYear(), m, 1);
+    renderExpenseCalendar();
+  });
+}
+if ($("exp-cal-year-select")) {
+  $("exp-cal-year-select").addEventListener("change", (e) => {
+    const y = parseInt(e.target.value, 10);
+    expCalViewDate = new Date(y, expCalViewDate.getMonth(), 1);
+    renderExpenseCalendar();
+  });
+}
+
 function openExpenseSheet(expense) {
   const viewYm = toLocalMonthPrefix(viewDate);
   const targetYm = expense && expense.dateISO
@@ -2639,21 +2848,21 @@ function openExpenseSheet(expense) {
   $("amount").value = expense ? expense.amount : "";
   $("category").value = expense ? expense.category : "Food";
   $("note").value = expense ? expense.note || "" : "";
-  const expDateInput = $("expense-date");
-  if (expDateInput) {
-    if (expense) {
-      expDateInput.value = expense.dateISO;
-    } else if (selectedDateISO) {
-      expDateInput.value = selectedDateISO;
-    } else if (viewYm !== toLocalMonthPrefix(new Date())) {
-      expDateInput.value = toLocalISO(viewDate);
-    } else {
-      expDateInput.value = toLocalISO(new Date());
-    }
+
+  let initialDateISO = toLocalISO(new Date());
+  if (expense && expense.dateISO) {
+    initialDateISO = expense.dateISO;
+  } else if (selectedDateISO) {
+    initialDateISO = selectedDateISO;
+  } else if (viewYm !== toLocalMonthPrefix(new Date())) {
+    initialDateISO = toLocalISO(viewDate);
   }
+  closeExpenseCalendar(false);
+  setExpenseDateValue(initialDateISO);
   addSheet.classList.remove("hidden");
 }
 function closeExpenseSheet() {
+  closeExpenseCalendar(false);
   expenseForm.reset();
   editingId = null;
   addSheet.classList.add("hidden");
@@ -2853,13 +3062,56 @@ function getMonthBudgetPoolMetrics(ym) {
   };
 }
 
-function updateMonthBudgetSheetVisuals(amountVal, animateThumb = false) {
+let lastMinFloorToastTime = 0;
+
+function triggerMinFloorFeedback(minAllocatable, spentSoFar, showToastAlert = true) {
+  const noticeEl = $("month-budget-sheet-notice");
+
+  if (noticeEl) {
+    noticeEl.textContent = `Minimum budget for this month is ${fmt(minAllocatable)} because ${fmt(spentSoFar)} has already been spent. (Tap 'Unrestrict' below to remove the monthly limit.)`;
+    noticeEl.classList.remove("hidden");
+  }
+
+  const now = Date.now();
+  if (showToastAlert && now - lastMinFloorToastTime > 1200) {
+    lastMinFloorToastTime = now;
+    showToast(`Minimum is ${fmt(minAllocatable)} (${fmt(spentSoFar)} already spent)`);
+  }
+}
+
+function updateMonthBudgetSheetVisuals(amountVal, animateThumb = false, forceMinNotice = false) {
   const ym = toLocalMonthPrefix(viewDate);
   const { maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
   const slider = $("month-budget-slider");
   const fill = $("month-budget-slider-fill");
+  const minFill = $("month-budget-slider-min-fill");
+  const minTick = $("month-budget-slider-min-tick");
+  const minWrap = $("month-sheet-min-wrap");
+  const minAllocEl = $("month-sheet-min-alloc");
   const pctLabel = $("month-budget-slider-pct");
   const noticeEl = $("month-budget-sheet-notice");
+
+  const minPct = maxAllocatable > 0
+    ? Math.min(100, Math.max(0, Math.round((minAllocatable / maxAllocatable) * 100)))
+    : 0;
+
+  if (minFill) minFill.style.width = `${minPct}%`;
+  if (minTick) {
+    if (minPct > 0 && minPct < 100) {
+      minTick.style.left = `${minPct}%`;
+      minTick.classList.remove("hidden");
+    } else {
+      minTick.classList.add("hidden");
+    }
+  }
+  if (minWrap && minAllocEl) {
+    if (minAllocatable > 0) {
+      minAllocEl.textContent = fmt(minAllocatable);
+      minWrap.classList.remove("hidden");
+    } else {
+      minWrap.classList.add("hidden");
+    }
+  }
 
   const clampedVal = maxAllocatable > 0
     ? Math.min(maxAllocatable, Math.max(0, round2(amountVal)))
@@ -2904,18 +3156,21 @@ function updateMonthBudgetSheetVisuals(amountVal, animateThumb = false) {
 
   document.querySelectorAll(".budget-pct-btn").forEach((btn) => {
     const btnPct = parseInt(btn.dataset.pct, 10);
-    btn.classList.toggle("active", maxAllocatable > 0 && targetPct === btnPct);
+    const btnVal = btnPct === 100 ? maxAllocatable : Math.round((btnPct / 100) * maxAllocatable);
+    const isBelowMin = maxAllocatable > 0 && btnVal < minAllocatable;
+    btn.classList.toggle("below-min", isBelowMin);
+    btn.classList.toggle("active", maxAllocatable > 0 && !isBelowMin && targetPct === btnPct);
   });
 
   if (noticeEl) {
     if (maxAllocatable <= 0) {
-      noticeEl.textContent = "Your available Budget is $0.00. Add funds to your Budget first to lend a budget to this month.";
+      noticeEl.textContent = `Your available Budget is ${fmt(0)}. Add funds to your Budget first to lend a budget to this month.`;
+      noticeEl.classList.remove("hidden");
+    } else if (forceMinNotice || (spentSoFar > 0 && clampedVal <= minAllocatable && minAllocatable > 0)) {
+      noticeEl.textContent = `Minimum budget for this month is ${fmt(minAllocatable)} because ${fmt(spentSoFar)} has already been spent. (Tap 'Unrestrict' below to remove the monthly limit.)`;
       noticeEl.classList.remove("hidden");
     } else if (clampedVal >= maxAllocatable && maxAllocatable > 0) {
       noticeEl.textContent = `Notice: You are allocating 100% of your available Budget (${fmt(maxAllocatable)}) to this month.`;
-      noticeEl.classList.remove("hidden");
-    } else if (spentSoFar > 0 && clampedVal > 0 && clampedVal < minAllocatable) {
-      noticeEl.textContent = `Minimum month budget is ${fmt(minAllocatable)} to cover expenses already logged this month.`;
       noticeEl.classList.remove("hidden");
     } else {
       noticeEl.classList.add("hidden");
@@ -2930,7 +3185,7 @@ function openMonthBudgetSheet() {
     return;
   }
 
-  const { allocated, maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+  const { allocated, maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
   const titleEl = $("month-budget-sheet-title");
   if (titleEl) titleEl.textContent = `Budget for ${formatMonthYearLabel(ym)}`;
 
@@ -2938,7 +3193,9 @@ function openMonthBudgetSheet() {
   if ($("month-sheet-max-alloc")) $("month-sheet-max-alloc").textContent = fmt(maxAllocatable);
 
   const inputEl = $("budget-input");
-  const initialVal = allocated > 0 ? allocated : 0;
+  const initialVal = allocated > 0
+    ? Math.max(minAllocatable, allocated)
+    : (minAllocatable > 0 ? minAllocatable : 0);
   if (inputEl) {
     inputEl.min = String(minAllocatable);
     inputEl.max = String(maxAllocatable);
@@ -2947,13 +3204,13 @@ function openMonthBudgetSheet() {
 
   const unrestrictBtn = $("unrestrict-month-budget-btn");
   if (unrestrictBtn) {
-    unrestrictBtn.classList.toggle("hidden", allocated <= 0);
+    unrestrictBtn.classList.toggle("hidden", allocated <= 0 && spentSoFar <= 0);
   }
 
   const slider = $("month-budget-slider");
   if (slider) slider.disabled = maxAllocatable <= 0;
 
-  updateMonthBudgetSheetVisuals(initialVal, false);
+  updateMonthBudgetSheetVisuals(initialVal, false, minAllocatable > 0 && initialVal <= minAllocatable);
   budgetSheet.classList.remove("hidden");
 }
 
@@ -2970,38 +3227,56 @@ if (monthBudgetSlider) {
   });
   monthBudgetSlider.addEventListener("input", (e) => {
     const ym = toLocalMonthPrefix(viewDate);
-    const { maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+    const { maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
     if (maxAllocatable <= 0) return;
     const pct = parseInt(e.target.value, 10) || 0;
-    let rawVal = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
-    if (rawVal > 0 && rawVal < minAllocatable) rawVal = minAllocatable;
+    const rawVal = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
+
+    if (minAllocatable > 0 && rawVal < minAllocatable) {
+      if (monthBudgetInput) monthBudgetInput.value = minAllocatable;
+      updateMonthBudgetSheetVisuals(minAllocatable, false, true);
+      triggerMinFloorFeedback(minAllocatable, spentSoFar, true);
+      return;
+    }
+
     if (monthBudgetInput) monthBudgetInput.value = rawVal;
-    updateMonthBudgetSheetVisuals(rawVal, false);
+    updateMonthBudgetSheetVisuals(rawVal, false, false);
   });
 }
 
 if (monthBudgetInput) {
   monthBudgetInput.addEventListener("input", (e) => {
     if (sliderWrap) sliderWrap.classList.remove("dragging");
+    const ym = toLocalMonthPrefix(viewDate);
+    const { minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
     const val = parseFloat(e.target.value) || 0;
-    updateMonthBudgetSheetVisuals(val, true);
+    const belowFloor = minAllocatable > 0 && val > 0 && val < minAllocatable;
+    updateMonthBudgetSheetVisuals(val, true, belowFloor);
+    if (belowFloor) {
+      triggerMinFloorFeedback(minAllocatable, spentSoFar, false);
+    }
   });
 }
 
 document.querySelectorAll(".budget-pct-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     const ym = toLocalMonthPrefix(viewDate);
-    const { maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+    const { maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
     if (maxAllocatable <= 0) {
       showToast("Add funds to your Budget first");
       return;
     }
     if (sliderWrap) sliderWrap.classList.remove("dragging");
     const pct = parseInt(btn.dataset.pct, 10) || 0;
-    let targetVal = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
-    if (targetVal < minAllocatable) targetVal = minAllocatable;
-    if (monthBudgetInput) monthBudgetInput.value = targetVal;
-    updateMonthBudgetSheetVisuals(targetVal, true);
+    const rawTarget = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
+    if (minAllocatable > 0 && rawTarget < minAllocatable) {
+      if (monthBudgetInput) monthBudgetInput.value = minAllocatable;
+      updateMonthBudgetSheetVisuals(minAllocatable, true, true);
+      triggerMinFloorFeedback(minAllocatable, spentSoFar, true);
+      return;
+    }
+    if (monthBudgetInput) monthBudgetInput.value = rawTarget;
+    updateMonthBudgetSheetVisuals(rawTarget, true, false);
   });
 });
 
@@ -3737,7 +4012,7 @@ function renderSummaryCard(spent) {
   const globalValEl = $("global-budget-value");
   if (globalValEl) {
     globalValEl.textContent = fmt(globalBudget);
-    globalValEl.className = globalBudget > 0 ? "global-budget-value" : "global-budget-value";
+    globalValEl.className = "global-budget-value";
   }
 
   const summaryGrid = $("summary-grid");
@@ -3877,7 +4152,7 @@ function renderSummaryCard(spent) {
         }
       }
     } else {
-      if (summaryBudget) summaryBudget.textContent = "$0.00";
+      if (summaryBudget) summaryBudget.textContent = fmt(0);
       if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
       if (summaryRemaining) {
         summaryRemaining.textContent = "N/A";
@@ -3891,11 +4166,9 @@ function renderSummaryCard(spent) {
   }
 }
 
-function populateYearSelect() {
-  const yearSelect = $("calendar-year-select");
+function populateYearSelectElement(yearSelect, selectedYear) {
   if (!yearSelect) return;
   const curYear = new Date().getFullYear();
-  const selectedYear = viewDate.getFullYear();
 
   // Always cover the earliest recorded expense so history is reachable.
   let earliestYear = curYear;
@@ -3924,6 +4197,10 @@ function populateYearSelect() {
     yearSelect.dataset.range = rangeKey;
   }
   yearSelect.value = selectedYear;
+}
+
+function populateYearSelect() {
+  populateYearSelectElement($("calendar-year-select"), viewDate.getFullYear());
 }
 
 function renderCalendar() {
@@ -4469,7 +4746,7 @@ function drawChart(labels, actual, projected, budget) {
 
   const yLabels = [0, 0.5, 1].map((f) => {
     const y = pad.top + innerH * (1 - f);
-    return `<text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${inkSoft}" text-anchor="end" font-family="Inter, sans-serif">$${Math.round(maxY * f)}</text>`;
+    return `<text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${escapeHtml(inkSoft)}" text-anchor="end" font-family="Inter, sans-serif">${escapeHtml(currencySymbol)}${Math.round(maxY * f)}</text>`;
   }).join("");
 
   const xTickDays = [1, Math.max(1, Math.round(n / 2)), n].filter((v, i, a) => a.indexOf(v) === i);

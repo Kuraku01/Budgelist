@@ -13,10 +13,28 @@
     <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
     <title>Budgelist</title>
     <script>
+      // Clear stale web bundle if native APK/app build changed (must run before OTA CSS injection)
+      (function checkBundleValidity() {
+        var NATIVE_BUILD_KEY = "v0.2.0-beta";
+        try {
+          var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
+          if (currentBuildKey !== NATIVE_BUILD_KEY) {
+            console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
+            localStorage.removeItem("budgelist-bundle-app-js");
+            localStorage.removeItem("budgelist-bundle-style-css");
+            localStorage.removeItem("budgelist-bundle-body-html");
+            localStorage.removeItem("budgelist-installed-bundle-key");
+            localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
+          }
+        } catch (e) {}
+      })();
+
       // Apply saved theme before paint to avoid a flash of the wrong theme.
       try {
         var t = localStorage.getItem("budgelist-theme");
         if (t) document.documentElement.setAttribute("data-theme", t);
+        var ct = localStorage.getItem("budgelist-color-theme");
+        if (ct) document.documentElement.setAttribute("data-color-theme", ct);
       } catch (e) {}
 
       // Apply live OTA CSS bundle override if present
@@ -716,8 +734,73 @@
           <label for="amount">Amount</label>
           <input type="number" id="amount" step="0.01" min="0.01" required />
 
-          <label for="expense-date">Date</label>
-          <input type="date" id="expense-date" required />
+          <label for="expense-date-trigger">Date</label>
+          <input type="hidden" id="expense-date" required />
+          <div id="expense-date-picker" class="expense-date-picker">
+            <button
+              type="button"
+              id="expense-date-trigger"
+              class="custom-select-trigger expense-date-trigger"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              <span class="custom-select-value">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="color: var(--primary); flex-shrink: 0;"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span id="expense-date-trigger-text" class="custom-select-text">Today</span>
+              </span>
+              <svg class="custom-select-arrow" viewBox="0 0 24 24">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <div id="expense-date-popover" class="calendar-popover expense-date-popover hidden">
+              <div class="calendar-popover-head">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <button type="button" id="exp-cal-prev" class="nav-arrow exp-cal-arrow" aria-label="Previous month">&lsaquo;</button>
+                  <button type="button" id="exp-cal-next" class="nav-arrow exp-cal-arrow" aria-label="Next month">&rsaquo;</button>
+                  <button type="button" id="exp-cal-today-btn" class="calendar-reset-chip" style="margin-left: 2px;">Today</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <select id="exp-cal-month-select" class="mini-select" aria-label="Select expense month">
+                    <option value="0">Jan</option>
+                    <option value="1">Feb</option>
+                    <option value="2">Mar</option>
+                    <option value="3">Apr</option>
+                    <option value="4">May</option>
+                    <option value="5">Jun</option>
+                    <option value="6">Jul</option>
+                    <option value="7">Aug</option>
+                    <option value="8">Sep</option>
+                    <option value="9">Oct</option>
+                    <option value="10">Nov</option>
+                    <option value="11">Dec</option>
+                  </select>
+                  <select id="exp-cal-year-select" class="mini-select" aria-label="Select expense year">
+                    <option value="2026">2026</option>
+                  </select>
+                </div>
+              </div>
+              <div class="calendar-grid-weekdays">
+                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+              </div>
+              <div id="expense-calendar-grid-days" class="calendar-grid-days"></div>
+            </div>
+          </div>
 
           <label for="category">Category</label>
           <select id="category">
@@ -809,7 +892,8 @@
         <h2 id="month-budget-sheet-title">Month budget</h2>
         <p id="month-budget-pool-sub" class="sheet-sub">
           Available in Budget: <strong id="month-sheet-global-avail">$0.00</strong>
-          &middot; Max for month: <strong id="month-sheet-max-alloc">$0.00</strong>
+          &middot; Max: <strong id="month-sheet-max-alloc">$0.00</strong>
+          <span id="month-sheet-min-wrap" class="hidden">&middot; Min (spent): <strong id="month-sheet-min-alloc">$0.00</strong></span>
         </p>
         <form id="budget-form">
           <label for="budget-input">Month budget amount</label>
@@ -822,8 +906,10 @@
             </div>
             <div class="budget-slider-wrap">
               <div class="budget-slider-track">
+                <div id="month-budget-slider-min-fill" class="budget-slider-min-fill"></div>
                 <div id="month-budget-slider-fill" class="budget-slider-fill"></div>
               </div>
+              <div id="month-budget-slider-min-tick" class="budget-slider-min-tick hidden" title="Minimum required for expenses already spent"></div>
               <input
                 type="range"
                 id="month-budget-slider"
@@ -1085,6 +1171,36 @@
                     <span class="slider"></span>
                   </label>
                 </div>
+
+                <div class="theme-picker-section">
+                  <span class="setting-title" style="display: block; margin-bottom: 8px;">Color theme</span>
+                  <div id="theme-palette-grid" class="theme-palette-grid" role="radiogroup" aria-label="Color theme">
+                    <button type="button" class="theme-swatch-btn active" data-color-theme="violet" aria-label="Violet theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #6c4cf1 50%, #a58df8 50%);"></span>
+                      <span class="theme-swatch-label">Violet</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="emerald" aria-label="Emerald theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #0f9f6e 50%, #34d399 50%);"></span>
+                      <span class="theme-swatch-label">Emerald</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="ocean" aria-label="Ocean theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #2563eb 50%, #60a5fa 50%);"></span>
+                      <span class="theme-swatch-label">Ocean</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="rose" aria-label="Rose theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #e11d74 50%, #f472b6 50%);"></span>
+                      <span class="theme-swatch-label">Rose</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="sunset" aria-label="Sunset theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #ea580c 50%, #fb923c 50%);"></span>
+                      <span class="theme-swatch-label">Sunset</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="slate" aria-label="Slate theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #3b4b64 50%, #94a3b8 50%);"></span>
+                      <span class="theme-swatch-label">Slate</span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1188,7 +1304,7 @@
                 <div class="about-card">
                   <div class="about-brand-row">
                     <span class="brand">Budgelist</span>
-                    <span class="version-badge">v0.1.2-beta</span>
+                    <span class="version-badge">v0.2.0-beta</span>
                   </div>
                   <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
 
@@ -1225,14 +1341,33 @@
                         width: 100%;
                       "
                     >
-                      <span>What's New in v0.1.2-beta</span>
+                      <span>What's New in v0.2.0-beta</span>
                       <span id="release-notes-arrow">▸</span>
                     </button>
                     <div
                       id="release-notes-content"
                       class="release-notes-list hidden"
                     >
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.1.2-beta</h4>
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.0-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Two-Tier Global &amp; Monthly Budget System:</strong> Manage an overall Budget pool with a detailed addition history log, and lend monthly budgets using a synchronized input, smooth slider, and preset chips.
+                        </li>
+                        <li>
+                          <strong>Automatic Past-Month Settlement &amp; Lock:</strong> Unspent monthly budget automatically returns once to your Budget when a month ends, while past months lock to preserve historical records.
+                        </li>
+                        <li>
+                          <strong>Interactive Calendar &amp; Custom Date Picker:</strong> Full month/year dropdowns with auto-expanding year ranges (1970–+50 yrs), day-level filtering, and a custom dropdown calendar in the Add Expense sheet.
+                        </li>
+                        <li>
+                          <strong>Color Themes &amp; UI Polish:</strong> Choose from 6 color themes (Violet, Emerald, Ocean, Rose, Sunset, Slate) in Light or Dark mode, plus tactile 3D FAB depth and app-wide text selection prevention.
+                        </li>
+                        <li>
+                          <strong>Universal Live OTA Engine &amp; Security Hardening:</strong> Full HTML/CSS/JS over-the-air updates, upgraded Capacitor 8.6.0 &amp; AGP 9.5.0, and hardened CSV export validation.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.2-beta</h4>
                       <ul>
                         <li>
                           <strong>Upgraded Forecast Algorithm:</strong> Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines.
@@ -1654,22 +1789,6 @@
     </div>
 
     <script>
-      // Clear stale web bundle if native APK/app version changed
-      (function checkBundleValidity() {
-        var NATIVE_BUILD_KEY = "v0.1.2-beta";
-        var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
-        if (currentBuildKey !== NATIVE_BUILD_KEY) {
-          console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
-          try {
-            localStorage.removeItem("budgelist-bundle-app-js");
-            localStorage.removeItem("budgelist-bundle-style-css");
-            localStorage.removeItem("budgelist-bundle-body-html");
-            localStorage.removeItem("budgelist-installed-bundle-key");
-            localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
-          } catch (e) {}
-        }
-      })();
-
       window.bootApp = function bootApp() {
         if (window.__booted) return;
         window.__booted = true;

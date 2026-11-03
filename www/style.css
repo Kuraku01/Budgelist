@@ -47,9 +47,121 @@
   --success-ink: #86efac;
 }
 
-* {
+/* Emerald Theme */
+:root[data-color-theme="emerald"] {
+  --bg: #f0f9f5;
+  --surface: #ffffff;
+  --ink: #142a22;
+  --ink-soft: #547569;
+  --line: #d4ece2;
+  --primary: #0f9f6e;
+  --primary-ink: #ffffff;
+}
+:root[data-theme="dark"][data-color-theme="emerald"] {
+  --bg: #0f1b17;
+  --surface: #172822;
+  --ink: #ecf7f3;
+  --ink-soft: #92b6a8;
+  --line: #254037;
+  --primary: #34d399;
+  --primary-ink: #0f1b17;
+}
+
+/* Ocean Theme */
+:root[data-color-theme="ocean"] {
+  --bg: #f0f6ff;
+  --surface: #ffffff;
+  --ink: #142138;
+  --ink-soft: #566a8a;
+  --line: #d6e4fa;
+  --primary: #2563eb;
+  --primary-ink: #ffffff;
+}
+:root[data-theme="dark"][data-color-theme="ocean"] {
+  --bg: #0f1726;
+  --surface: #172338;
+  --ink: #eef4ff;
+  --ink-soft: #94a9c9;
+  --line: #273957;
+  --primary: #60a5fa;
+  --primary-ink: #0f1726;
+}
+
+/* Rose Theme */
+:root[data-color-theme="rose"] {
+  --bg: #fff2f6;
+  --surface: #ffffff;
+  --ink: #2c1520;
+  --ink-soft: #7d5869;
+  --line: #f7d9e4;
+  --primary: #e11d74;
+  --primary-ink: #ffffff;
+}
+:root[data-theme="dark"][data-color-theme="rose"] {
+  --bg: #1e1117;
+  --surface: #2b1821;
+  --ink: #fceef4;
+  --ink-soft: #c497ab;
+  --line: #462836;
+  --primary: #f472b6;
+  --primary-ink: #1e1117;
+}
+
+/* Sunset Theme */
+:root[data-color-theme="sunset"] {
+  --bg: #fff6f0;
+  --surface: #ffffff;
+  --ink: #2b1b12;
+  --ink-soft: #7c6252;
+  --line: #f5dfd0;
+  --primary: #ea580c;
+  --primary-ink: #ffffff;
+}
+:root[data-theme="dark"][data-color-theme="sunset"] {
+  --bg: #1d140f;
+  --surface: #2a1d16;
+  --ink: #fdf2ec;
+  --ink-soft: #c4a390;
+  --line: #443024;
+  --primary: #fb923c;
+  --primary-ink: #1d140f;
+}
+
+/* Slate Theme */
+:root[data-color-theme="slate"] {
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --ink: #18202c;
+  --ink-soft: #606d80;
+  --line: #dce2ec;
+  --primary: #3b4b64;
+  --primary-ink: #ffffff;
+}
+:root[data-theme="dark"][data-color-theme="slate"] {
+  --bg: #11151c;
+  --surface: #1a202b;
+  --ink: #eef2f7;
+  --ink-soft: #94a2b8;
+  --line: #2c3546;
+  --primary: #94a3b8;
+  --primary-ink: #11151c;
+}
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 a, button, input, select, textarea {
@@ -136,7 +248,7 @@ h1, h2, .brand {
   align-items: center;
   justify-content: center;
   color: var(--primary);
-  box-shadow: 0 8px 24px -4px rgba(108, 76, 241, 0.15);
+  box-shadow: 0 8px 24px -4px color-mix(in srgb, var(--primary) 16%, transparent);
   margin-bottom: 16px;
   animation: pulse-logo 2s ease-in-out infinite;
 }
@@ -249,7 +361,7 @@ input {
 input:focus {
   border-color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.18);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .password-input-wrap {
@@ -316,8 +428,7 @@ select:hover {
 select:focus {
   border-color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.18);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .auth-actions, .sheet-actions { display: flex; gap: 10px; margin-top: 22px; }
@@ -559,12 +670,12 @@ select:focus {
 
 .month-label-btn:hover, .month-label-btn:active {
   border-color: var(--primary);
-  background: rgba(108, 76, 241, 0.06);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
 .month-label-btn.filtered {
   border-color: var(--primary);
-  background: rgba(108, 76, 241, 0.12);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
   color: var(--primary);
 }
 
@@ -991,18 +1102,36 @@ select:focus {
   width: 58px;
   height: 58px;
   border-radius: 50%;
-  background: var(--primary);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--primary) 86%, #ffffff) 0%,
+    var(--primary) 65%,
+    color-mix(in srgb, var(--primary) 82%, #000000) 100%
+  );
   color: var(--primary-ink);
   font-size: 28px;
-  border: none;
-  box-shadow: 0 8px 20px rgba(108, 76, 241, 0.4);
+  font-weight: 600;
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 4px 0 color-mix(in srgb, var(--primary) 65%, #000000),
+    0 8px 14px rgba(0, 0, 0, 0.34),
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.32),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.18);
   cursor: pointer;
   z-index: 15;
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.16s ease;
 }
 
 .fab:active {
-  transform: scale(0.9) rotate(90deg);
+  transform: translateY(3px) scale(0.97);
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--primary) 65%, #000000),
+    0 3px 6px rgba(0, 0, 0, 0.28),
+    inset 0 1px 2px rgba(0, 0, 0, 0.22);
 }
 
 .sheet {
@@ -1317,13 +1446,13 @@ select:focus {
 }
 
 .version-badge {
-  background: rgba(108, 76, 241, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary);
   font-size: 12px;
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(108, 76, 241, 0.25);
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, transparent);
 }
 
 .about-dev {
@@ -1425,7 +1554,7 @@ select:focus {
 
 .avatar-cell:active, .avatar-cell.active {
   border-color: var(--primary);
-  background: rgba(108, 76, 241, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   transform: scale(1.05);
 }
 
@@ -1461,7 +1590,7 @@ select:focus {
 .avatar-chip.active {
   border-color: var(--primary);
   transform: scale(1.1);
-  box-shadow: 0 0 0 3px rgba(108, 76, 241, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .readonly-input {
@@ -1687,7 +1816,7 @@ select {
 .custom-select-trigger:focus-visible {
   border-color: var(--primary);
   outline: none;
-  box-shadow: 0 0 0 3.5px rgba(99, 102, 241, 0.18);
+  box-shadow: 0 0 0 3.5px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .custom-select-value {
@@ -1868,9 +1997,9 @@ select {
 }
 
 .global-budget-action-btn {
-  background: rgba(108, 76, 241, 0.12);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
   color: var(--primary);
-  border: 1px solid rgba(108, 76, 241, 0.25);
+  border: 1px solid color-mix(in srgb, var(--primary) 26%, transparent);
   border-radius: 16px;
   padding: 5px 11px;
   font-size: 11px;
@@ -2205,4 +2334,140 @@ select {
 .overbudget-actions button {
   width: 100%;
 }
+
+/* ---------- Expense Sheet Custom Date Picker Dropdown ---------- */
+.expense-date-picker {
+  position: relative;
+}
+
+.expense-date-trigger {
+  width: 100%;
+  margin-top: 4px;
+}
+
+.expense-date-picker.open .expense-date-trigger {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.expense-date-picker.open .expense-date-trigger .custom-select-arrow {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+.expense-date-popover {
+  margin-top: 8px;
+  margin-bottom: 4px;
+  padding: 12px;
+  background: var(--bg);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+.exp-cal-arrow {
+  width: 28px;
+  height: 28px;
+  font-size: 17px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---------- Slider Minimum Floor & Feedback ---------- */
+.budget-slider-min-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0%;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(245, 158, 11, 0.28),
+    rgba(245, 158, 11, 0.28) 4px,
+    rgba(245, 158, 11, 0.48) 4px,
+    rgba(245, 158, 11, 0.48) 8px
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+.budget-slider-fill {
+  position: relative;
+  z-index: 0;
+}
+
+.budget-slider-min-tick {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2.5px;
+  background: var(--caution);
+  border-radius: 2px;
+  transform: translateX(-50%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.budget-pct-btn.below-min {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+/* ---------- Theme Palette Picker in Settings ---------- */
+.theme-picker-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.theme-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.theme-swatch-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background-color 0.16s ease, transform 0.12s ease;
+}
+
+.theme-swatch-btn:active {
+  transform: scale(0.97);
+}
+
+.theme-swatch-btn.active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.theme-swatch-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.theme-swatch-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 

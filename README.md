@@ -1,22 +1,24 @@
 # Budgelist
 
-![Version](https://img.shields.io/badge/version-0.1.3--beta-purple.svg)
+![Version](https://img.shields.io/badge/version-0.2.0--beta-purple.svg)
 ![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Offline Support](https://img.shields.io/badge/offline-100%25%20supported-brightgreen.svg)
 
-**Budgelist** is a privacy-focused personal expense tracker, monthly budgeting application, and financial forecasting tool. It combines local-first offline performance with real-time cloud synchronization across devices.
+**Budgelist** is a privacy-focused personal expense tracker, two-tier budgeting application, and financial forecasting tool. It combines local-first offline performance with real-time cloud synchronization across devices.
 
-The application allows users to log daily expenses, track recurring bills, convert between global currencies using live exchange rates, and view trend-line forecasts predicting end-of-month budget adherence.
+The application allows users to manage an overall Budget pool, allocate monthly budgets, log daily expenses, track recurring bills, convert between global currencies using live exchange rates, and view multi-factor trend-line forecasts predicting end-of-month budget adherence.
 
 ---
 
-## What's New in v0.1.3-beta
+## What's New in v0.2.0-beta
 
-- **Upgraded Forecast Engine**: Multi-factor forecasting algorithm incorporating upcoming unpaid recurring bills on scheduled days and multi-month spend velocity baselines.
-- **Safe Daily Spend Target**: Real-time daily variable spend allowance to keep your budget on track.
-- **Multi-Tier Budget Warnings**: Intelligent alerts for critical over-budget spending (red), near-budget caution (amber), and on-track status (green).
-- **Budget Reference Line**: Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
+- **Two-Tier Global & Monthly Budget System**: Manage an accessible Global Budget pool with a persistent **Budget History** ledger (optional descriptions, individual entry deletion, and log-only vs. full-reset options), and lend monthly budgets via synchronized manual input, smooth animated slider (with spent-floor indicators), and percentage chips (`25%`, `50%`, `75%`, `MAX`).
+- **Automatic Past-Month Settlement & Historical Lock**: When a month concludes, unspent monthly budget automatically returns once to your Global Budget. Past months lock by default to preserve historical records (with optional unlock for historical edits without affecting current Budget).
+- **Interactive Calendar & Custom Expense Date Picker**: Navigate seamlessly from 1970 to 50 years into the future with auto-expanding year dropdowns, day-level filtering, and a custom dropdown calendar in the Add/Edit Expense sheet.
+- **6 Color Themes & Native UI Polish**: Customize appearance with 6 color themes (**Violet**, **Emerald**, **Ocean**, **Rose**, **Sunset**, and **Slate**) across Light and Dark modes, tactile 3D FAB depth, and app-wide text selection prevention.
+- **Upgraded Forecast Engine & Multi-Tier Warnings**: Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines, Safe Daily Spend Targets, and 3-tier budget risk warnings (`safe`, `caution`, `critical`).
+- **Universal Live OTA Engine & Security Hardening**: Full HTML/CSS/JS over-the-air bundle updates, upgraded Capacitor 8.6.0 & AGP 9.5.0, zero npm vulnerabilities, and hardened CSV export path validation.
 
 ---
 
@@ -31,7 +33,7 @@ The application allows users to log daily expenses, track recurring bills, conve
 
 ### Over-The-Air (OTA) Live Updates & Update Management
 
-- **Zero-Friction Web OTA Updates**: Background web bundle updater automatically downloads and applies `dist.zip` assets attached to GitHub Releases.
+- **Zero-Friction Web OTA Updates**: Background web bundle updater automatically downloads and applies `dist.zip` assets (HTML, CSS, and JS) attached to GitHub Releases.
 - **Loading Screen Progress Indicator**: Displays real-time download percentage and extraction progress bar when a new web update is detected on boot.
 - **Mandatory vs. Optional Update Controls**: Differentiates breaking version changes from optional minor patches to ensure API compatibility without unnecessary user friction.
 
@@ -44,18 +46,18 @@ The application allows users to log daily expenses, track recurring bills, conve
 ### Financial Forecasting & Analytics
 
 - **Visual Category Distribution**: Provides inline vector charts (Donut and Bar views) for spending category breakdowns.
-- **Linear Regression Forecast**: Calculates a least-squares trendline across daily cumulative spending to project end-of-month totals against budget limits.
+- **Multi-Factor Forecast**: Combines historical variable velocity, current month pace, and scheduled unpaid recurring bills to project end-of-month totals against monthly or global budget limits.
 
 ### Privacy, Security & Code Quality
 
 - **Isolated User Storage**: Data access is restricted to authenticated account owners via server-enforced security policies.
 - **Content Security Policy (CSP)**: Enforces strict resource origin controls for Firebase Auth, Google APIs, WebSocket streams, and GitHub Releases API.
-- **XSS & Credential Protection**: Completely eliminates `innerHTML` sinks in dynamic list rendering and prevents raw password persistence in local storage.
+- **XSS & Credential Protection**: Eliminates unsanitized `innerHTML` sinks in dynamic list rendering, prevents raw password persistence in local storage, and validates native CSV export filenames against path traversal.
 
 ### Native Android Features
 
 - **CSV Data Export**: Export monthly expense records directly to the device's Downloads directory in standard CSV format.
-- **System Theme Integration**: Supports Light and Dark modes matching system appearance preferences.
+- **Theme & Color Palette Integration**: Supports Light and Dark modes paired with 6 customizable color themes.
 
 ---
 
@@ -64,7 +66,7 @@ The application allows users to log daily expenses, track recurring bills, conve
 ### Installing the Android Application
 
 1. Navigate to the [Releases](https://github.com/Kuraku01/Budgelist/releases) page of this repository.
-2. Download the latest `Budgelist_0.1.3-beta.apk` asset.
+2. Download the latest `Budgelist_0.2.0-beta.apk` asset.
 3. Open the downloaded file on your Android device to complete installation.
 
 ### Developer Setup & Building From Source
