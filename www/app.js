@@ -2526,9 +2526,19 @@ function toggleCalendar() {
   else openCalendar();
 }
 
+// Navigable calendar range shared by arrows, swipe and the month/year selects.
+const CAL_MIN_YEAR = 1970;
+const CAL_FUTURE_YEARS = 50;
+const YEAR_SELECT_SPAN = 10;
+function calendarBounds() {
+  const maxYear = new Date().getFullYear() + CAL_FUTURE_YEARS;
+  return { min: new Date(CAL_MIN_YEAR, 0, 1), max: new Date(maxYear, 11, 1) };
+}
+
 function changeMonth(delta) {
   const next = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
-  if (next > startOfMonth(new Date())) return; // no future months
+  const { min, max } = calendarBounds();
+  if (next < min || next > max) return;
   viewDate = next;
   selectedDateISO = null;
   const grid = $("calendar-grid-days");
@@ -2750,7 +2760,9 @@ function render() {
     if (resetBtn) resetBtn.classList.toggle("hidden", toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow));
   }
 
-  $("next-month").disabled = viewDate >= startOfMonth(new Date());
+  const { min: calMin, max: calMax } = calendarBounds();
+  $("prev-month").disabled = viewDate <= calMin;
+  $("next-month").disabled = viewDate >= calMax;
 
   renderSummaryCard(monthTotal);
   renderCategories(monthExpenses);
@@ -2838,25 +2850,32 @@ function populateYearSelect() {
   if (!yearSelect) return;
   const curYear = new Date().getFullYear();
   const selectedYear = viewDate.getFullYear();
-  const minYear = Math.min(curYear - 10, selectedYear - 3);
-  const maxYear = Math.max(curYear + 5, selectedYear + 3);
 
-  let exists = false;
-  for (let i = 0; i < yearSelect.options.length; i++) {
-    if (parseInt(yearSelect.options[i].value, 10) === selectedYear) {
-      exists = true;
-      break;
-    }
+  // Always cover the earliest recorded expense so history is reachable.
+  let earliestYear = curYear;
+  for (const e of expenses) {
+    if (!e.dateISO) continue;
+    const y = parseInt(e.dateISO.slice(0, 4), 10);
+    if (y < earliestYear) earliestYear = y;
   }
 
-  if (yearSelect.children.length === 0 || !exists) {
-    yearSelect.innerHTML = "";
+  // Window spans ±YEAR_SELECT_SPAN around both today and the viewed year, so picking
+  // an edge year automatically loads further years on the next render.
+  const minYear = Math.max(CAL_MIN_YEAR, Math.min(curYear - YEAR_SELECT_SPAN, selectedYear - YEAR_SELECT_SPAN, earliestYear));
+  const maxYear = Math.min(curYear + CAL_FUTURE_YEARS, Math.max(curYear + YEAR_SELECT_SPAN, selectedYear + YEAR_SELECT_SPAN));
+  const rangeKey = `${minYear}-${maxYear}`;
+
+  if (yearSelect.dataset.range !== rangeKey) {
+    const frag = document.createDocumentFragment();
     for (let y = minYear; y <= maxYear; y++) {
       const opt = document.createElement("option");
       opt.value = y;
       opt.textContent = y;
-      yearSelect.appendChild(opt);
+      frag.appendChild(opt);
     }
+    yearSelect.innerHTML = "";
+    yearSelect.appendChild(frag);
+    yearSelect.dataset.range = rangeKey;
   }
   yearSelect.value = selectedYear;
 }
@@ -3150,6 +3169,8 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
   const metricsEl = $("forecast-metrics");
   const warning = $("budget-warning");
 
+  const isFutureMonth = !isCurrentMonth && viewDate > startOfMonth(new Date());
+
   if (monthExpenses.length === 0) {
     container.classList.add("hidden");
     container.innerHTML = "";
@@ -3277,7 +3298,9 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
     ? `Trending toward ${fmt(Math.max(0, projectedTotal))} by day ${daysInMonth}` +
       (upcomingRecurringTotal > 0 ? ` (includes ${fmt(upcomingRecurringTotal)} upcoming bills)` : "") +
       (monthlyBudget > 0 ? ` with budget of ${fmt(monthlyBudget)}.` : ".")
-    : `${fmt(projectedTotal)} spent this month.`;
+    : isFutureMonth
+      ? `${fmt(projectedTotal)} scheduled this month.`
+      : `${fmt(projectedTotal)} spent this month.`;
 
   const warningText = $("budget-warning-text");
   warning.className = "warning hidden";
@@ -3288,7 +3311,9 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
       warning.classList.add("critical");
       warningText.textContent = isCurrentMonth
         ? `Over Budget: You've spent ${fmt(currentTotalSpent)} of your ${fmt(monthlyBudget)} budget (${fmt(currentTotalSpent - monthlyBudget)} over limit). Safe daily allowance is ${fmt(0)}.`
-        : `Over Budget: Month ended ${fmt(currentTotalSpent - monthlyBudget)} over budget (${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)}).`;
+        : isFutureMonth
+          ? `Over Budget: Scheduled expenses of ${fmt(currentTotalSpent)} already exceed your ${fmt(monthlyBudget)} budget by ${fmt(currentTotalSpent - monthlyBudget)}.`
+          : `Over Budget: Month ended ${fmt(currentTotalSpent - monthlyBudget)} over budget (${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)}).`;
     } else if (isCurrentMonth && projectedTotal > monthlyBudget) {
       const overage = projectedTotal - monthlyBudget;
       warning.classList.add("critical");
@@ -3303,7 +3328,9 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
       warningText.textContent = `On Track: Projected total is ${fmt(projectedTotal)} (${pct}% of your ${fmt(monthlyBudget)} budget). Safe daily target: ${fmt(safeDailyAllowance)}/day.`;
     } else {
       warning.classList.add("safe");
-      warningText.textContent = `Ended within budget: ${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)} budget.`;
+      warningText.textContent = isFutureMonth
+        ? `Within budget so far: ${fmt(currentTotalSpent)} scheduled of ${fmt(monthlyBudget)} budget.`
+        : `Ended within budget: ${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)} budget.`;
     }
   }
 }
