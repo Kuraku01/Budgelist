@@ -96,7 +96,10 @@ let uid = null;
 let isGuest = false;
 let expenses = [];       // {id, amount, category, note, dateISO, createdAt, recurringId}
 let recurring = [];      // {id, amount, category, note, dayOfMonth}
-let monthlyBudget = 0;
+let monthlyBudget = 0;   // legacy / active month effective budget reference
+let globalBudget = 0;    // available unallocated global budget pool
+let monthBudgets = {};   // { "YYYY-MM": { allocated, directCovered, unrestrictedDeducted, status: "active"|"settled", finalSpent, finalAllocated, returnedToGlobal, settledAt, unlocked } }
+let budgetHistory = [];  // [{ id, amount, description, createdAt, type: "deposit"|"return", month? }]
 let currencySymbol = safeGet("budgelist-currency-symbol") || "$";
 let editingId = null;
 let editingRecurringId = null;
@@ -105,6 +108,10 @@ let selectedDateISO = null; // null = full month view, or "YYYY-MM-DD" for day f
 let calendarOpen = false;
 let recurringApplied = false;
 let isSyncing = false;
+let pendingOverbudgetContext = null;
+let pendingUnlockCallback = null;
+let pendingUnlockYm = null;
+let sliderAnimFrame = null;
 
 const dayLabelFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -461,14 +468,194 @@ function runDataSchemaMigrations() {
   }
 }
 
+function round2(n) {
+  return Math.round((Number(n) || 0) * 100) / 100;
+}
+
+function monthSpentTotal(ym) {
+  return round2(
+    expenses
+      .filter((e) => e && e.dateISO && e.dateISO.startsWith(ym))
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0)
+  );
+}
+
+function ensureMonthRecord(ym) {
+  if (!monthBudgets || typeof monthBudgets !== "object") monthBudgets = {};
+  if (!monthBudgets[ym] || typeof monthBudgets[ym] !== "object") {
+    const curYm = toLocalMonthPrefix(new Date());
+    monthBudgets[ym] = {
+      allocated: 0,
+      directCovered: 0,
+      unrestrictedDeducted: 0,
+      status: ym < curYm ? "settled" : "active",
+      finalSpent: ym < curYm ? monthSpentTotal(ym) : null,
+      finalAllocated: 0,
+      returnedToGlobal: 0,
+      settledAt: ym < curYm ? Date.now() : null,
+      unlocked: false,
+    };
+  }
+  return monthBudgets[ym];
+}
+
+function isPastMonth(ym) {
+  return ym < toLocalMonthPrefix(new Date());
+}
+
+function isPastMonthUnlocked(ym) {
+  if (!isPastMonth(ym)) return true;
+  const rec = ensureMonthRecord(ym);
+  return Boolean(rec.unlocked);
+}
+
+function formatMonthYearLabel(ym) {
+  const [y, m] = ym.split("-").map((v) => parseInt(v, 10));
+  if (!y || !m) return ym;
+  return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1));
+}
+
+function syncBudgetState() {
+  saveLocalUserCache();
+  if (!isGuest && uid) {
+    enqueueSync({
+      type: "SYNC_BUDGET_STATE",
+      data: {
+        globalBudget: round2(globalBudget),
+        monthBudgets: monthBudgets,
+        budgetHistory: budgetHistory,
+        budgetMigratedV2: true,
+      },
+    });
+  }
+}
+
+// Settle any elapsed past months ONCE, returning unspent monthly budget to globalBudget
+function settleElapsedMonths(shouldSync = true) {
+  const curYm = toLocalMonthPrefix(new Date());
+  const candidateYms = new Set(Object.keys(monthBudgets || {}));
+  for (const e of expenses) {
+    if (e && e.dateISO && e.dateISO.length >= 7) {
+      const ym = e.dateISO.slice(0, 7);
+      if (ym < curYm) candidateYms.add(ym);
+    }
+  }
+
+  const pastYms = Array.from(candidateYms).filter((ym) => ym < curYm).sort();
+  let changed = false;
+
+  for (const ym of pastYms) {
+    const rec = monthBudgets[ym];
+    const spent = monthSpentTotal(ym);
+
+    if (rec && rec.status === "settled") {
+      continue;
+    }
+
+    const allocated = rec ? round2(rec.allocated || 0) : 0;
+    const unspent = allocated > 0 ? Math.max(0, round2(allocated - spent)) : 0;
+
+    if (unspent > 0) {
+      globalBudget = round2(globalBudget + unspent);
+      const retId = "ret_" + ym;
+      if (!budgetHistory.some((h) => h && h.id === retId)) {
+        budgetHistory.unshift({
+          id: retId,
+          amount: unspent,
+          description: `Unspent returned from ${formatMonthYearLabel(ym)}`,
+          createdAt: Date.now(),
+          type: "return",
+          month: ym,
+        });
+      }
+    }
+
+    monthBudgets[ym] = {
+      allocated: allocated,
+      directCovered: rec ? round2(rec.directCovered || 0) : 0,
+      unrestrictedDeducted: rec ? round2(rec.unrestrictedDeducted || 0) : 0,
+      status: "settled",
+      finalSpent: spent,
+      finalAllocated: allocated,
+      returnedToGlobal: unspent,
+      settledAt: Date.now(),
+      unlocked: rec && rec.unlocked ? true : false,
+    };
+    changed = true;
+  }
+
+  if (changed) {
+    if (shouldSync) syncBudgetState();
+    else saveLocalUserCache();
+  }
+}
+
+// Reconcile an active month's spend against globalBudget (handles unrestricted deductions & refunds)
+function reconcileActiveMonthSpend(ym) {
+  if (!ym) return;
+  if (isPastMonth(ym)) {
+    const rec = ensureMonthRecord(ym);
+    rec.finalSpent = monthSpentTotal(ym);
+    return;
+  }
+
+  const rec = ensureMonthRecord(ym);
+  const spent = monthSpentTotal(ym);
+
+  if ((rec.allocated || 0) <= 0) {
+    // Unrestricted active month: expenses deduct directly from globalBudget
+    const alreadyDeducted = round2(rec.unrestrictedDeducted || 0);
+    const delta = round2(spent - alreadyDeducted);
+    if (delta > 0) {
+      const deduct = Math.min(globalBudget, delta);
+      globalBudget = Math.max(0, round2(globalBudget - deduct));
+      rec.unrestrictedDeducted = round2(alreadyDeducted + deduct);
+    } else if (delta < 0) {
+      const refund = Math.min(alreadyDeducted, Math.abs(delta));
+      globalBudget = round2(globalBudget + refund);
+      rec.unrestrictedDeducted = round2(alreadyDeducted - refund);
+    }
+  } else {
+    // Restricted active month: if spend dropped below allocated + directCovered, refund excess directCovered
+    const directCov = round2(rec.directCovered || 0);
+    if (directCov > 0) {
+      const neededDirect = Math.max(0, round2(spent - rec.allocated));
+      if (neededDirect < directCov) {
+        const refund = round2(directCov - neededDirect);
+        globalBudget = round2(globalBudget + refund);
+        rec.directCovered = neededDirect;
+      }
+    }
+  }
+}
+
 function loadLocalUserCache() {
   runDataSchemaMigrations();
   try {
     monthlyBudget = parseFloat(safeGet(cacheKey("budget"))) || 0;
+    globalBudget = parseFloat(safeGet(cacheKey("global-budget"))) || 0;
+    monthBudgets = JSON.parse(safeGet(cacheKey("month-budgets"))) || {};
+    budgetHistory = JSON.parse(safeGet(cacheKey("budget-history"))) || [];
     expenses = JSON.parse(safeGet(cacheKey("expenses"))) || [];
     recurring = JSON.parse(safeGet(cacheKey("recurring"))) || [];
+
+    if (!safeGet(cacheKey("budget-v2-migrated"))) {
+      if (globalBudget === 0 && monthlyBudget > 0) {
+        globalBudget = round2(monthlyBudget);
+        budgetHistory.unshift({
+          id: "mig_init_" + Date.now(),
+          amount: globalBudget,
+          description: "Initial migrated budget",
+          createdAt: Date.now(),
+          type: "deposit",
+        });
+      }
+      safeSet(cacheKey("budget-v2-migrated"), "true");
+      saveLocalUserCache();
+    }
+    settleElapsedMonths(false);
   } catch (e) {
-    monthlyBudget = 0; expenses = []; recurring = [];
+    monthlyBudget = 0; globalBudget = 0; monthBudgets = {}; budgetHistory = []; expenses = []; recurring = [];
   }
 }
 
@@ -476,6 +663,9 @@ function saveLocalUserCache() {
   safeSet(cacheKey("expenses"), JSON.stringify(expenses));
   safeSet(cacheKey("recurring"), JSON.stringify(recurring));
   safeSet(cacheKey("budget"), String(monthlyBudget));
+  safeSet(cacheKey("global-budget"), String(round2(globalBudget)));
+  safeSet(cacheKey("month-budgets"), JSON.stringify(monthBudgets || {}));
+  safeSet(cacheKey("budget-history"), JSON.stringify(budgetHistory || []));
 }
 
 let syncQueue = [];
@@ -755,15 +945,24 @@ async function syncCloudData(showToastFeedback = false) {
             const budgetData = { monthlyBudget: item.amount };
             if (item.currencySymbol) budgetData.currencySymbol = item.currencySymbol;
             await setDoc(doc(db, "users", uid), budgetData, { merge: true });
+          } else if (item.type === "SYNC_BUDGET_STATE") {
+            await setDoc(doc(db, "users", uid), item.data, { merge: true });
           } else if (item.type === "UPDATE_PROFILE") {
             await setDoc(doc(db, "users", uid), item.data, { merge: true });
           } else if (item.type === "CONVERT_CURRENCY") {
             let batch = writeBatch(db);
             let opCount = 0;
 
-            if (item.data.monthlyBudget !== undefined || item.data.currencySymbol) {
+            if (
+              item.data.monthlyBudget !== undefined ||
+              item.data.globalBudget !== undefined ||
+              item.data.currencySymbol
+            ) {
               const uData = {};
               if (item.data.monthlyBudget !== undefined) uData.monthlyBudget = item.data.monthlyBudget;
+              if (item.data.globalBudget !== undefined) uData.globalBudget = item.data.globalBudget;
+              if (item.data.monthBudgets !== undefined) uData.monthBudgets = item.data.monthBudgets;
+              if (item.data.budgetHistory !== undefined) uData.budgetHistory = item.data.budgetHistory;
               if (item.data.currencySymbol) uData.currencySymbol = item.data.currencySymbol;
               batch.set(doc(db, "users", uid), uData, { merge: true });
               opCount++;
@@ -815,6 +1014,37 @@ async function syncCloudData(showToastFeedback = false) {
     if (userDocSnap.exists()) {
       const uData = userDocSnap.data();
       monthlyBudget = uData.monthlyBudget || 0;
+
+      if (uData.budgetMigratedV2) {
+        globalBudget = round2(uData.globalBudget || 0);
+        monthBudgets = uData.monthBudgets && typeof uData.monthBudgets === "object" ? uData.monthBudgets : {};
+        budgetHistory = Array.isArray(uData.budgetHistory) ? uData.budgetHistory : [];
+        safeSet(cacheKey("budget-v2-migrated"), "true");
+      } else {
+        if (monthlyBudget > 0 && globalBudget === 0) {
+          globalBudget = round2(monthlyBudget);
+          if (budgetHistory.length === 0) {
+            budgetHistory.unshift({
+              id: "mig_cloud_" + Date.now(),
+              amount: globalBudget,
+              description: "Initial migrated budget",
+              createdAt: Date.now(),
+              type: "deposit",
+            });
+          }
+        }
+        safeSet(cacheKey("budget-v2-migrated"), "true");
+        await setDoc(
+          doc(db, "users", uid),
+          {
+            globalBudget: round2(globalBudget),
+            monthBudgets: monthBudgets || {},
+            budgetHistory: budgetHistory || [],
+            budgetMigratedV2: true,
+          },
+          { merge: true }
+        );
+      }
 
       // Restore currency symbol from Firestore
       if (uData.currencySymbol) {
@@ -889,6 +1119,7 @@ async function syncCloudData(showToastFeedback = false) {
     const recSnap = await getDocs(recQuery);
     recurring = recSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
+    settleElapsedMonths(true);
     saveLocalUserCache();
     applyRecurringForThisMonth();
     renderRecurring();
@@ -1405,12 +1636,30 @@ async function convertCurrencyTo(targetCurrency) {
       rate = targetRate / fromRate;
     }
 
-    monthlyBudget = Math.round(monthlyBudget * rate * 100) / 100;
+    monthlyBudget = round2(monthlyBudget * rate);
+    globalBudget = round2(globalBudget * rate);
+    if (monthBudgets && typeof monthBudgets === "object") {
+      Object.keys(monthBudgets).forEach((ym) => {
+        const mb = monthBudgets[ym];
+        if (!mb || typeof mb !== "object") return;
+        if (mb.allocated != null) mb.allocated = round2(mb.allocated * rate);
+        if (mb.directCovered != null) mb.directCovered = round2(mb.directCovered * rate);
+        if (mb.unrestrictedDeducted != null) mb.unrestrictedDeducted = round2(mb.unrestrictedDeducted * rate);
+        if (mb.finalSpent != null) mb.finalSpent = round2(mb.finalSpent * rate);
+        if (mb.finalAllocated != null) mb.finalAllocated = round2(mb.finalAllocated * rate);
+        if (mb.returnedToGlobal != null) mb.returnedToGlobal = round2(mb.returnedToGlobal * rate);
+      });
+    }
+    if (Array.isArray(budgetHistory)) {
+      budgetHistory.forEach((h) => {
+        if (h && h.amount != null) h.amount = round2(h.amount * rate);
+      });
+    }
     expenses.forEach(e => {
-      e.amount = Math.round(e.amount * rate * 100) / 100;
+      e.amount = round2(e.amount * rate);
     });
     recurring.forEach(r => {
-      r.amount = Math.round(r.amount * rate * 100) / 100;
+      r.amount = round2(r.amount * rate);
     });
 
     const targetSymbol = CURRENCY_MAP[targetCurrency] || targetCurrency;
@@ -1431,6 +1680,9 @@ async function convertCurrencyTo(targetCurrency) {
       data: {
         currencySymbol: currencySymbol,
         monthlyBudget: monthlyBudget,
+        globalBudget: globalBudget,
+        monthBudgets: monthBudgets,
+        budgetHistory: budgetHistory,
         expenses: expenses.map(e => ({ id: e.id, amount: e.amount })),
         recurring: recurring.map(r => ({ id: r.id, amount: r.amount }))
       }
@@ -2237,19 +2489,17 @@ function humanAuthError(code) {
 }
 
 // ---------- Expenses ----------
-expenseForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const amount = parseFloat($("amount").value);
-  const category = $("category").value;
-  const note = $("note").value.trim();
-  const customDateInput = $("expense-date") ? $("expense-date").value : null;
-  if (!amount || amount <= 0) return;
-
-  let expDate = customDateInput || selectedDateISO || todayISO();
+function commitExpenseSave({ targetEditingId, amount, category, note, expDate }) {
+  let prevYm = null;
+  if (targetEditingId) {
+    const existing = expenses.find((x) => x.id === targetEditingId);
+    if (existing && existing.dateISO) prevYm = existing.dateISO.slice(0, 7);
+  }
+  const newYm = expDate.slice(0, 7);
 
   if (isGuest) {
-    if (editingId) {
-      const exp = expenses.find((x) => x.id === editingId);
+    if (targetEditingId) {
+      const exp = expenses.find((x) => x.id === targetEditingId);
       if (exp) { exp.amount = amount; exp.category = category; exp.note = note; exp.dateISO = expDate; }
       showToast("Expense updated");
     } else {
@@ -2259,52 +2509,130 @@ expenseForm.addEventListener("submit", async (e) => {
       });
       showToast("Expense added");
     }
-    saveLocalUserCache();
-    applyRecurringForThisMonth();
-    render();
-    closeExpenseSheet();
-    return;
+  } else {
+    if (targetEditingId) {
+      const exp = expenses.find((x) => x.id === targetEditingId);
+      if (exp) { exp.amount = amount; exp.category = category; exp.note = note; exp.dateISO = expDate; }
+      enqueueSync({ type: "UPDATE_EXPENSE", id: targetEditingId, data: { amount, category, note, dateISO: expDate } });
+      showToast("Expense updated");
+    } else {
+      const newExp = {
+        id: "cloud_exp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        amount, category, note, dateISO: expDate, createdAt: Date.now(),
+      };
+      expenses.unshift(newExp);
+      enqueueSync({ type: "ADD_EXPENSE", data: newExp });
+      showToast("Expense added");
+    }
   }
 
-  if (editingId) {
-    const exp = expenses.find((x) => x.id === editingId);
-    if (exp) { exp.amount = amount; exp.category = category; exp.note = note; exp.dateISO = expDate; }
-    enqueueSync({ type: "UPDATE_EXPENSE", id: editingId, data: { amount, category, note, dateISO: expDate } });
-    showToast("Expense updated");
-  } else {
-    const newExp = {
-      id: "cloud_exp_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
-      amount, category, note, dateISO: expDate, createdAt: Date.now(),
-    };
-    expenses.unshift(newExp);
-    enqueueSync({ type: "ADD_EXPENSE", data: newExp });
-    showToast("Expense added");
+  if (prevYm && prevYm !== newYm) {
+    reconcileActiveMonthSpend(prevYm);
   }
-  saveLocalUserCache();
+  reconcileActiveMonthSpend(newYm);
+  syncBudgetState();
   applyRecurringForThisMonth();
   render();
   closeExpenseSheet();
+}
+
+expenseForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const amount = round2(parseFloat($("amount").value));
+  const category = $("category").value;
+  const note = $("note").value.trim();
+  const customDateInput = $("expense-date") ? $("expense-date").value : null;
+  if (!amount || amount <= 0) return;
+
+  const expDate = customDateInput || selectedDateISO || todayISO();
+  const targetYm = expDate.slice(0, 7);
+
+  // 1. If targeting a past month, check lock state
+  if (isPastMonth(targetYm)) {
+    if (!isPastMonthUnlocked(targetYm)) {
+      openUnlockPastSheet(targetYm, () => {
+        commitExpenseSave({ targetEditingId: editingId, amount, category, note, expDate });
+      });
+      return;
+    }
+    commitExpenseSave({ targetEditingId: editingId, amount, category, note, expDate });
+    return;
+  }
+
+  // 2. Current or Future Month: check if expense exceeds Month Budget or Global Budget
+  const rec = ensureMonthRecord(targetYm);
+  const currentSpent = monthSpentTotal(targetYm);
+  const oldExp = editingId ? expenses.find((x) => x.id === editingId) : null;
+  const oldInSameYm = oldExp && oldExp.dateISO && oldExp.dateISO.startsWith(targetYm) ? round2(oldExp.amount) : 0;
+  const projectedMonthSpent = round2(currentSpent - oldInSameYm + amount);
+  const netDelta = round2(amount - oldInSameYm);
+
+  if (netDelta > 0) {
+    const allocated = round2(rec.allocated || 0);
+    if (allocated > 0) {
+      const coveredLimit = round2(allocated + (rec.directCovered || 0));
+      if (projectedMonthSpent > coveredLimit) {
+        const deficit = round2(projectedMonthSpent - coveredLimit);
+        openOverbudgetSheet({
+          mode: "restricted",
+          targetYm,
+          deficit,
+          netDelta,
+          pendingExpense: { targetEditingId: editingId, amount, category, note, expDate },
+        });
+        return;
+      }
+    } else {
+      // Unrestricted month: check if netDelta exceeds available globalBudget
+      if (netDelta > globalBudget) {
+        const deficit = round2(netDelta - globalBudget);
+        openOverbudgetSheet({
+          mode: "unrestricted",
+          targetYm,
+          deficit,
+          netDelta,
+          pendingExpense: { targetEditingId: editingId, amount, category, note, expDate },
+        });
+        return;
+      }
+    }
+  }
+
+  commitExpenseSave({ targetEditingId: editingId, amount, category, note, expDate });
 });
 
 $("delete-expense-btn").addEventListener("click", async () => {
   if (!editingId) return;
-  if (isGuest) {
-    expenses = expenses.filter((e) => e.id !== editingId);
-    saveLocalUserCache();
-    render();
-    closeExpenseSheet();
-    showToast("Expense deleted");
+  const exp = expenses.find((e) => e.id === editingId);
+  const expYm = exp && exp.dateISO ? exp.dateISO.slice(0, 7) : null;
+
+  if (expYm && isPastMonth(expYm) && !isPastMonthUnlocked(expYm)) {
+    openUnlockPastSheet(expYm, () => $("delete-expense-btn").click());
     return;
   }
+
   expenses = expenses.filter((e) => e.id !== editingId);
-  enqueueSync({ type: "DELETE_EXPENSE", id: editingId });
-  saveLocalUserCache();
+  if (!isGuest) {
+    enqueueSync({ type: "DELETE_EXPENSE", id: editingId });
+  }
+  if (expYm) reconcileActiveMonthSpend(expYm);
+  syncBudgetState();
   render();
   closeExpenseSheet();
   showToast("Expense deleted");
 });
 
 function openExpenseSheet(expense) {
+  const viewYm = toLocalMonthPrefix(viewDate);
+  const targetYm = expense && expense.dateISO
+    ? expense.dateISO.slice(0, 7)
+    : (selectedDateISO ? selectedDateISO.slice(0, 7) : viewYm);
+
+  if (isPastMonth(targetYm) && !isPastMonthUnlocked(targetYm)) {
+    openUnlockPastSheet(targetYm, () => openExpenseSheet(expense));
+    return;
+  }
+
   editingId = expense ? expense.id : null;
   $("expense-sheet-title").textContent = expense ? "Edit expense" : "Add expense";
   $("delete-expense-btn").classList.toggle("hidden", !expense);
@@ -2313,7 +2641,15 @@ function openExpenseSheet(expense) {
   $("note").value = expense ? expense.note || "" : "";
   const expDateInput = $("expense-date");
   if (expDateInput) {
-    expDateInput.value = expense ? expense.dateISO : (selectedDateISO || toLocalISO(new Date()));
+    if (expense) {
+      expDateInput.value = expense.dateISO;
+    } else if (selectedDateISO) {
+      expDateInput.value = selectedDateISO;
+    } else if (viewYm !== toLocalMonthPrefix(new Date())) {
+      expDateInput.value = toLocalISO(viewDate);
+    } else {
+      expDateInput.value = toLocalISO(new Date());
+    }
   }
   addSheet.classList.remove("hidden");
 }
@@ -2481,35 +2817,598 @@ async function applyRecurringForThisMonth() {
       }
     }
 
+    reconcileActiveMonthSpend(monthPrefix);
+    syncBudgetState();
     safeSet(appliedKey, "true");
   } finally {
     isApplyingRecurring = false;
   }
 }
 
-// ---------- Budget ----------
-budgetForm.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  monthlyBudget = parseFloat($("budget-input").value) || 0;
-  if (isGuest) {
-    saveLocalUserCache();
-    budgetSheet.classList.add("hidden");
-    render();
-    showToast("Monthly budget saved");
+// ---------- Two-Tier Budget System (Global Pool + Month Envelope + Past Lock + Overbudget) ----------
+function getMonthBudgetPoolMetrics(ym) {
+  const rec = ensureMonthRecord(ym);
+  const spentSoFar = monthSpentTotal(ym);
+  const allocated = round2(rec.allocated || 0);
+  const directCovered = round2(rec.directCovered || 0);
+  const unrestrictedDeducted = round2(rec.unrestrictedDeducted || 0);
+
+  // Funds currently drawn from the global pool by this active month
+  const currentlyFromPool = allocated > 0
+    ? round2(allocated + directCovered)
+    : unrestrictedDeducted;
+
+  const maxAllocatable = round2(globalBudget + currentlyFromPool);
+  const minAllocatable = round2(Math.min(maxAllocatable, spentSoFar));
+
+  return {
+    rec,
+    spentSoFar,
+    allocated,
+    directCovered,
+    unrestrictedDeducted,
+    currentlyFromPool,
+    maxAllocatable,
+    minAllocatable,
+  };
+}
+
+function updateMonthBudgetSheetVisuals(amountVal, animateThumb = false) {
+  const ym = toLocalMonthPrefix(viewDate);
+  const { maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
+  const slider = $("month-budget-slider");
+  const fill = $("month-budget-slider-fill");
+  const pctLabel = $("month-budget-slider-pct");
+  const noticeEl = $("month-budget-sheet-notice");
+
+  const clampedVal = maxAllocatable > 0
+    ? Math.min(maxAllocatable, Math.max(0, round2(amountVal)))
+    : 0;
+  const targetPct = maxAllocatable > 0
+    ? Math.min(100, Math.max(0, Math.round((clampedVal / maxAllocatable) * 100)))
+    : 0;
+
+  if (fill) fill.style.width = `${targetPct}%`;
+  if (pctLabel) pctLabel.textContent = `${targetPct}%`;
+
+  if (slider) {
+    if (sliderAnimFrame) {
+      cancelAnimationFrame(sliderAnimFrame);
+      sliderAnimFrame = null;
+    }
+    if (animateThumb) {
+      const startVal = parseFloat(slider.value) || 0;
+      const diff = targetPct - startVal;
+      if (Math.abs(diff) > 0.5) {
+        const duration = 240;
+        const startTime = performance.now();
+        const stepAnim = (now) => {
+          const t = Math.min(1, (now - startTime) / duration);
+          const eased = 1 - Math.pow(1 - t, 3); // cubic ease-out
+          slider.value = String(Math.round(startVal + diff * eased));
+          if (t < 1) {
+            sliderAnimFrame = requestAnimationFrame(stepAnim);
+          } else {
+            slider.value = String(targetPct);
+            sliderAnimFrame = null;
+          }
+        };
+        sliderAnimFrame = requestAnimationFrame(stepAnim);
+      } else {
+        slider.value = String(targetPct);
+      }
+    } else {
+      slider.value = String(targetPct);
+    }
+  }
+
+  document.querySelectorAll(".budget-pct-btn").forEach((btn) => {
+    const btnPct = parseInt(btn.dataset.pct, 10);
+    btn.classList.toggle("active", maxAllocatable > 0 && targetPct === btnPct);
+  });
+
+  if (noticeEl) {
+    if (maxAllocatable <= 0) {
+      noticeEl.textContent = "Your available Budget is $0.00. Add funds to your Budget first to lend a budget to this month.";
+      noticeEl.classList.remove("hidden");
+    } else if (clampedVal >= maxAllocatable && maxAllocatable > 0) {
+      noticeEl.textContent = `Notice: You are allocating 100% of your available Budget (${fmt(maxAllocatable)}) to this month.`;
+      noticeEl.classList.remove("hidden");
+    } else if (spentSoFar > 0 && clampedVal > 0 && clampedVal < minAllocatable) {
+      noticeEl.textContent = `Minimum month budget is ${fmt(minAllocatable)} to cover expenses already logged this month.`;
+      noticeEl.classList.remove("hidden");
+    } else {
+      noticeEl.classList.add("hidden");
+    }
+  }
+}
+
+function openMonthBudgetSheet() {
+  const ym = toLocalMonthPrefix(viewDate);
+  if (isPastMonth(ym)) {
+    showToast("Past months cannot have a new budget assigned.");
     return;
   }
-  saveLocalUserCache();
-  enqueueSync({ type: "SET_BUDGET", amount: monthlyBudget });
-  budgetSheet.classList.add("hidden");
-  render();
-  showToast("Monthly budget saved");
+
+  const { allocated, maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+  const titleEl = $("month-budget-sheet-title");
+  if (titleEl) titleEl.textContent = `Budget for ${formatMonthYearLabel(ym)}`;
+
+  if ($("month-sheet-global-avail")) $("month-sheet-global-avail").textContent = fmt(globalBudget);
+  if ($("month-sheet-max-alloc")) $("month-sheet-max-alloc").textContent = fmt(maxAllocatable);
+
+  const inputEl = $("budget-input");
+  const initialVal = allocated > 0 ? allocated : 0;
+  if (inputEl) {
+    inputEl.min = String(minAllocatable);
+    inputEl.max = String(maxAllocatable);
+    inputEl.value = initialVal > 0 ? initialVal : "";
+  }
+
+  const unrestrictBtn = $("unrestrict-month-budget-btn");
+  if (unrestrictBtn) {
+    unrestrictBtn.classList.toggle("hidden", allocated <= 0);
+  }
+
+  const slider = $("month-budget-slider");
+  if (slider) slider.disabled = maxAllocatable <= 0;
+
+  updateMonthBudgetSheetVisuals(initialVal, false);
+  budgetSheet.classList.remove("hidden");
+}
+
+const monthBudgetSlider = $("month-budget-slider");
+const monthBudgetInput = $("budget-input");
+const sliderWrap = document.querySelector(".budget-slider-wrap");
+
+if (monthBudgetSlider) {
+  monthBudgetSlider.addEventListener("pointerdown", () => {
+    if (sliderWrap) sliderWrap.classList.add("dragging");
+  });
+  monthBudgetSlider.addEventListener("pointerup", () => {
+    if (sliderWrap) sliderWrap.classList.remove("dragging");
+  });
+  monthBudgetSlider.addEventListener("input", (e) => {
+    const ym = toLocalMonthPrefix(viewDate);
+    const { maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+    if (maxAllocatable <= 0) return;
+    const pct = parseInt(e.target.value, 10) || 0;
+    let rawVal = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
+    if (rawVal > 0 && rawVal < minAllocatable) rawVal = minAllocatable;
+    if (monthBudgetInput) monthBudgetInput.value = rawVal;
+    updateMonthBudgetSheetVisuals(rawVal, false);
+  });
+}
+
+if (monthBudgetInput) {
+  monthBudgetInput.addEventListener("input", (e) => {
+    if (sliderWrap) sliderWrap.classList.remove("dragging");
+    const val = parseFloat(e.target.value) || 0;
+    updateMonthBudgetSheetVisuals(val, true);
+  });
+}
+
+document.querySelectorAll(".budget-pct-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const ym = toLocalMonthPrefix(viewDate);
+    const { maxAllocatable, minAllocatable } = getMonthBudgetPoolMetrics(ym);
+    if (maxAllocatable <= 0) {
+      showToast("Add funds to your Budget first");
+      return;
+    }
+    if (sliderWrap) sliderWrap.classList.remove("dragging");
+    const pct = parseInt(btn.dataset.pct, 10) || 0;
+    let targetVal = pct === 100 ? maxAllocatable : Math.round((pct / 100) * maxAllocatable);
+    if (targetVal < minAllocatable) targetVal = minAllocatable;
+    if (monthBudgetInput) monthBudgetInput.value = targetVal;
+    updateMonthBudgetSheetVisuals(targetVal, true);
+  });
 });
 
-budgetBtn.addEventListener("click", () => {
-  $("budget-input").value = monthlyBudget || "";
-  budgetSheet.classList.remove("hidden");
+budgetForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const ym = toLocalMonthPrefix(viewDate);
+  if (isPastMonth(ym)) return;
+
+  const { rec, maxAllocatable, minAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
+  const rawVal = round2(parseFloat($("budget-input").value) || 0);
+
+  if (rawVal <= 0) {
+    // Unrestrict the month and return unspent to globalBudget
+    rec.allocated = 0;
+    rec.directCovered = 0;
+    const deductForSpent = Math.min(maxAllocatable, spentSoFar);
+    rec.unrestrictedDeducted = deductForSpent;
+    globalBudget = Math.max(0, round2(maxAllocatable - deductForSpent));
+    syncBudgetState();
+    budgetSheet.classList.add("hidden");
+    render();
+    showToast("Month set to unrestricted budget");
+    return;
+  }
+
+  if (rawVal > maxAllocatable) {
+    showToast(`Cannot exceed available Budget (${fmt(maxAllocatable)})`);
+    $("budget-input").value = maxAllocatable;
+    updateMonthBudgetSheetVisuals(maxAllocatable, true);
+    return;
+  }
+
+  if (rawVal < minAllocatable) {
+    showToast(`Minimum budget for this month is ${fmt(minAllocatable)} (already spent)`);
+    $("budget-input").value = minAllocatable;
+    updateMonthBudgetSheetVisuals(minAllocatable, true);
+    return;
+  }
+
+  rec.allocated = rawVal;
+  rec.directCovered = 0;
+  rec.unrestrictedDeducted = 0;
+  rec.status = "active";
+  globalBudget = Math.max(0, round2(maxAllocatable - rawVal));
+
+  syncBudgetState();
+  budgetSheet.classList.add("hidden");
+  render();
+  showToast(`Month budget set to ${fmt(rawVal)}`);
 });
+
+const unrestrictMonthBtn = $("unrestrict-month-budget-btn");
+if (unrestrictMonthBtn) {
+  unrestrictMonthBtn.addEventListener("click", () => {
+    const ym = toLocalMonthPrefix(viewDate);
+    if (isPastMonth(ym)) return;
+    const { rec, maxAllocatable, spentSoFar } = getMonthBudgetPoolMetrics(ym);
+    rec.allocated = 0;
+    rec.directCovered = 0;
+    const deductForSpent = Math.min(maxAllocatable, spentSoFar);
+    rec.unrestrictedDeducted = deductForSpent;
+    globalBudget = Math.max(0, round2(maxAllocatable - deductForSpent));
+    syncBudgetState();
+    budgetSheet.classList.add("hidden");
+    render();
+    showToast("Month budget removed — unused funds returned to Budget");
+  });
+}
+
+budgetBtn.addEventListener("click", openMonthBudgetSheet);
+const unrestrictedSetBudgetBtn = $("unrestricted-set-budget-btn");
+if (unrestrictedSetBudgetBtn) {
+  unrestrictedSetBudgetBtn.addEventListener("click", openMonthBudgetSheet);
+}
 $("cancel-budget").addEventListener("click", () => budgetSheet.classList.add("hidden"));
+
+// ---------- Global Budget & History Sheet ----------
+const globalBudgetSheet = $("global-budget-sheet");
+const globalBudgetForm = $("global-budget-form");
+
+function renderBudgetHistoryList() {
+  const balanceEl = $("global-sheet-balance");
+  if (balanceEl) balanceEl.textContent = fmt(globalBudget);
+
+  const listEl = $("budget-history-list");
+  const emptyEl = $("budget-history-empty");
+  const clearBtn = $("clear-budget-history-btn");
+  const confirmBox = $("clear-budget-confirm-box");
+  if (!listEl || !emptyEl) return;
+
+  const items = Array.isArray(budgetHistory) ? budgetHistory : [];
+  emptyEl.classList.toggle("hidden", items.length > 0);
+  if (clearBtn) clearBtn.classList.toggle("hidden", items.length === 0);
+  if (items.length === 0 && confirmBox) confirmBox.classList.add("hidden");
+
+  listEl.innerHTML = "";
+  const frag = document.createDocumentFragment();
+  const dateFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  items.forEach((item) => {
+    if (!item) return;
+    const li = document.createElement("li");
+
+    const mainDiv = document.createElement("div");
+    mainDiv.className = "budget-history-main";
+
+    const descSpan = document.createElement("span");
+    descSpan.className = "budget-history-desc";
+    descSpan.textContent = item.description || (item.type === "return" ? "Returned from past month" : "Budget added");
+
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "budget-history-date";
+    dateSpan.textContent = item.createdAt ? dateFmt.format(new Date(item.createdAt)) : "";
+
+    mainDiv.appendChild(descSpan);
+    mainDiv.appendChild(dateSpan);
+
+    const rightDiv = document.createElement("div");
+    rightDiv.className = "budget-history-right";
+
+    const amtSpan = document.createElement("span");
+    amtSpan.className = "budget-history-amount";
+    amtSpan.textContent = `+${fmt(round2(item.amount || 0))}`;
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "recurring-delete";
+    delBtn.setAttribute("aria-label", "Delete history entry");
+    delBtn.textContent = "\u00d7";
+    delBtn.addEventListener("click", () => {
+      const amt = round2(item.amount || 0);
+      budgetHistory = budgetHistory.filter((h) => h && h.id !== item.id);
+      if (item.type !== "return") {
+        globalBudget = Math.max(0, round2(globalBudget - amt));
+      }
+      syncBudgetState();
+      renderBudgetHistoryList();
+      render();
+      showToast("Budget history entry deleted");
+    });
+
+    rightDiv.appendChild(amtSpan);
+    rightDiv.appendChild(delBtn);
+
+    li.appendChild(mainDiv);
+    li.appendChild(rightDiv);
+    frag.appendChild(li);
+  });
+
+  listEl.appendChild(frag);
+}
+
+function openGlobalBudgetSheet() {
+  if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+  renderBudgetHistoryList();
+  if (globalBudgetSheet) globalBudgetSheet.classList.remove("hidden");
+}
+
+function closeGlobalBudgetSheet() {
+  if (globalBudgetForm) globalBudgetForm.reset();
+  if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+  if (globalBudgetSheet) globalBudgetSheet.classList.add("hidden");
+}
+
+if ($("open-global-budget-btn")) {
+  $("open-global-budget-btn").addEventListener("click", openGlobalBudgetSheet);
+}
+if ($("close-global-budget-btn")) {
+  $("close-global-budget-btn").addEventListener("click", closeGlobalBudgetSheet);
+}
+
+if (globalBudgetForm) {
+  globalBudgetForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const amtInput = $("global-budget-amount-input");
+    const descInput = $("global-budget-desc-input");
+    const amount = round2(parseFloat(amtInput ? amtInput.value : "0"));
+    if (!amount || amount <= 0) return;
+
+    const desc = descInput && descInput.value.trim() ? descInput.value.trim() : "Budget deposit";
+    globalBudget = round2(globalBudget + amount);
+    budgetHistory.unshift({
+      id: "dep_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      amount,
+      description: desc,
+      createdAt: Date.now(),
+      type: "deposit",
+    });
+
+    globalBudgetForm.reset();
+    syncBudgetState();
+    renderBudgetHistoryList();
+    render();
+    showToast(`Added ${fmt(amount)} to Budget`);
+  });
+}
+
+if ($("clear-budget-history-btn")) {
+  $("clear-budget-history-btn").addEventListener("click", () => {
+    const box = $("clear-budget-confirm-box");
+    if (box) box.classList.toggle("hidden");
+  });
+}
+if ($("cancel-clear-history-btn")) {
+  $("cancel-clear-history-btn").addEventListener("click", () => {
+    if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+  });
+}
+if ($("clear-history-log-only-btn")) {
+  $("clear-history-log-only-btn").addEventListener("click", () => {
+    budgetHistory = [];
+    if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+    syncBudgetState();
+    renderBudgetHistoryList();
+    render();
+    showToast("Budget history log cleared");
+  });
+}
+if ($("clear-history-reset-all-btn")) {
+  $("clear-history-reset-all-btn").addEventListener("click", () => {
+    budgetHistory = [];
+    globalBudget = 0;
+    if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+    syncBudgetState();
+    renderBudgetHistoryList();
+    render();
+    showToast("Budget reset to $0.00 & history cleared");
+  });
+}
+
+// ---------- Over-Budget Interception Sheet ----------
+function openOverbudgetSheet(ctx) {
+  pendingOverbudgetContext = ctx;
+  const sheet = $("overbudget-sheet");
+  const titleEl = $("overbudget-sheet-title");
+  const descEl = $("overbudget-sheet-desc");
+  const incMonthBtn = $("overbudget-increase-month-btn");
+  const deductGlobalBtn = $("overbudget-deduct-global-btn");
+  const forceSaveBtn = $("overbudget-force-save-btn");
+
+  if (!sheet || !descEl) return;
+  const monthLabel = formatMonthYearLabel(ctx.targetYm);
+
+  if (ctx.mode === "restricted") {
+    if (globalBudget >= ctx.deficit) {
+      if (titleEl) titleEl.textContent = "Month Budget Exceeded";
+      descEl.className = "warning caution";
+      descEl.textContent = `This expense exceeds your remaining monthly budget for ${monthLabel} by ${fmt(ctx.deficit)}. You have ${fmt(globalBudget)} available in your Budget to cover it.`;
+
+      if (incMonthBtn) {
+        incMonthBtn.textContent = `Add +${fmt(ctx.deficit)} to Month Budget`;
+        incMonthBtn.classList.remove("hidden");
+      }
+      if (deductGlobalBtn) {
+        deductGlobalBtn.textContent = `Instant Deduction (-${fmt(ctx.deficit)} from Budget)`;
+        deductGlobalBtn.classList.remove("hidden");
+      }
+      if (forceSaveBtn) forceSaveBtn.classList.add("hidden");
+    } else {
+      if (titleEl) titleEl.textContent = "Month & Global Budget Exceeded";
+      descEl.className = "warning critical";
+      const shortBy = round2(ctx.deficit - globalBudget);
+      descEl.textContent = globalBudget > 0
+        ? `Over-Budget Warning: This expense exceeds your monthly budget by ${fmt(ctx.deficit)}, and your available Budget (${fmt(globalBudget)}) is short by ${fmt(shortBy)}.`
+        : `Over-Budget Warning: This expense exceeds your monthly budget by ${fmt(ctx.deficit)}, and your Budget has ${fmt(0)} remaining.`;
+
+      if (incMonthBtn) incMonthBtn.classList.add("hidden");
+      if (deductGlobalBtn) deductGlobalBtn.classList.add("hidden");
+      if (forceSaveBtn) {
+        forceSaveBtn.textContent = globalBudget > 0
+          ? `Use Available (${fmt(globalBudget)}) & Log Over-Budget`
+          : "Log Expense as Over-Budget";
+        forceSaveBtn.classList.remove("hidden");
+      }
+    }
+  } else {
+    // Unrestricted month over globalBudget
+    if (titleEl) titleEl.textContent = "Global Budget Exceeded";
+    descEl.className = "warning critical";
+    descEl.textContent = globalBudget > 0
+      ? `Global Over-Budget Warning: This expense (${fmt(ctx.netDelta)}) exceeds your available Budget (${fmt(globalBudget)}) by ${fmt(ctx.deficit)}.`
+      : `Global Over-Budget Warning: Your available Budget is ${fmt(0)}. Logging this expense will exceed your Budget by ${fmt(ctx.deficit)}.`;
+
+    if (incMonthBtn) incMonthBtn.classList.add("hidden");
+    if (deductGlobalBtn) deductGlobalBtn.classList.add("hidden");
+    if (forceSaveBtn) {
+      forceSaveBtn.textContent = globalBudget > 0
+        ? `Deduct Available (${fmt(globalBudget)}) & Log Over-Budget`
+        : "Log Expense as Over-Budget";
+      forceSaveBtn.classList.remove("hidden");
+    }
+  }
+
+  sheet.classList.remove("hidden");
+}
+
+function closeOverbudgetSheet() {
+  pendingOverbudgetContext = null;
+  if ($("overbudget-sheet")) $("overbudget-sheet").classList.add("hidden");
+}
+
+if ($("overbudget-increase-month-btn")) {
+  $("overbudget-increase-month-btn").addEventListener("click", () => {
+    if (!pendingOverbudgetContext) return;
+    const ctx = pendingOverbudgetContext;
+    const rec = ensureMonthRecord(ctx.targetYm);
+    rec.allocated = round2((rec.allocated || 0) + ctx.deficit);
+    globalBudget = Math.max(0, round2(globalBudget - ctx.deficit));
+    closeOverbudgetSheet();
+    commitExpenseSave(ctx.pendingExpense);
+    showToast(`Added ${fmt(ctx.deficit)} to month budget`);
+  });
+}
+
+if ($("overbudget-deduct-global-btn")) {
+  $("overbudget-deduct-global-btn").addEventListener("click", () => {
+    if (!pendingOverbudgetContext) return;
+    const ctx = pendingOverbudgetContext;
+    const rec = ensureMonthRecord(ctx.targetYm);
+    rec.directCovered = round2((rec.directCovered || 0) + ctx.deficit);
+    globalBudget = Math.max(0, round2(globalBudget - ctx.deficit));
+    closeOverbudgetSheet();
+    commitExpenseSave(ctx.pendingExpense);
+    showToast(`Deducted ${fmt(ctx.deficit)} directly from Budget`);
+  });
+}
+
+if ($("overbudget-force-save-btn")) {
+  $("overbudget-force-save-btn").addEventListener("click", () => {
+    if (!pendingOverbudgetContext) return;
+    const ctx = pendingOverbudgetContext;
+    if (ctx.mode === "restricted" && globalBudget > 0) {
+      const rec = ensureMonthRecord(ctx.targetYm);
+      rec.directCovered = round2((rec.directCovered || 0) + globalBudget);
+      globalBudget = 0;
+    }
+    closeOverbudgetSheet();
+    commitExpenseSave(ctx.pendingExpense);
+  });
+}
+
+if ($("overbudget-open-global-btn")) {
+  $("overbudget-open-global-btn").addEventListener("click", () => {
+    closeOverbudgetSheet();
+    openGlobalBudgetSheet();
+  });
+}
+
+if ($("overbudget-cancel-btn")) {
+  $("overbudget-cancel-btn").addEventListener("click", closeOverbudgetSheet);
+}
+
+// ---------- Past Month Lock / Unlock Sheet ----------
+function openUnlockPastSheet(ym, onUnlockedCallback) {
+  pendingUnlockYm = ym;
+  pendingUnlockCallback = onUnlockedCallback || null;
+  const titleEl = $("unlock-past-sheet-title");
+  if (titleEl) titleEl.textContent = `Unlock ${formatMonthYearLabel(ym)}?`;
+  if ($("unlock-past-sheet")) $("unlock-past-sheet").classList.remove("hidden");
+}
+
+function closeUnlockPastSheet() {
+  pendingUnlockYm = null;
+  pendingUnlockCallback = null;
+  if ($("unlock-past-sheet")) $("unlock-past-sheet").classList.add("hidden");
+}
+
+function togglePastMonthLock(ym) {
+  if (!isPastMonth(ym)) return;
+  const rec = ensureMonthRecord(ym);
+  if (rec.unlocked) {
+    rec.unlocked = false;
+    syncBudgetState();
+    render();
+    showToast(`${formatMonthYearLabel(ym)} locked`);
+  } else {
+    openUnlockPastSheet(ym, null);
+  }
+}
+
+if ($("cancel-unlock-past-btn")) {
+  $("cancel-unlock-past-btn").addEventListener("click", closeUnlockPastSheet);
+}
+if ($("confirm-unlock-past-btn")) {
+  $("confirm-unlock-past-btn").addEventListener("click", () => {
+    if (!pendingUnlockYm) return;
+    const ym = pendingUnlockYm;
+    const cb = pendingUnlockCallback;
+    const rec = ensureMonthRecord(ym);
+    rec.unlocked = true;
+    closeUnlockPastSheet();
+    syncBudgetState();
+    render();
+    showToast(`${formatMonthYearLabel(ym)} unlocked for historical editing`);
+    if (typeof cb === "function") cb();
+  });
+}
+if ($("past-month-lock-btn")) {
+  $("past-month-lock-btn").addEventListener("click", () => {
+    togglePastMonthLock(toLocalMonthPrefix(viewDate));
+  });
+}
+if ($("past-month-notice-btn")) {
+  $("past-month-notice-btn").addEventListener("click", () => {
+    togglePastMonthLock(toLocalMonthPrefix(viewDate));
+  });
+}
 
 // ---------- Month navigation & Calendar popover controls ----------
 const monthLabelFmt = new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" });
@@ -2767,10 +3666,11 @@ function currentMonthData() {
 
 // ---------- Rendering ----------
 function render() {
+  settleElapsedMonths(true);
   const { monthExpenses, isCurrentMonth, daysInMonth, today } = currentMonthData();
   const monthPrefix = toLocalMonthPrefix(viewDate);
   const allMonthExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(monthPrefix));
-  const monthTotal = allMonthExpenses.reduce((s, e) => s + e.amount, 0);
+  const monthTotal = round2(allMonthExpenses.reduce((s, e) => s + e.amount, 0));
 
   const realNow = new Date();
   const todayISO = toLocalISO(realNow);
@@ -2829,17 +3729,94 @@ if (clearDayFilterBtn) {
 }
 
 function renderSummaryCard(spent) {
+  const ym = toLocalMonthPrefix(viewDate);
+  const past = isPastMonth(ym);
+  const rec = ensureMonthRecord(ym);
+
+  // Global Budget Bar (always visible & accessible anywhere)
+  const globalValEl = $("global-budget-value");
+  if (globalValEl) {
+    globalValEl.textContent = fmt(globalBudget);
+    globalValEl.className = globalBudget > 0 ? "global-budget-value" : "global-budget-value";
+  }
+
+  const summaryGrid = $("summary-grid");
+  const summarySpentLabel = $("summary-spent-label");
   const summarySpent = $("summary-spent");
+  const summaryBudgetLabel = $("summary-budget-label");
   const summaryBudget = $("summary-budget");
+  const summaryStatRemaining = $("summary-stat-remaining");
   const summaryRemaining = $("summary-remaining");
   const summaryRemainingLabel = $("summary-remaining-label");
+  const progressTrack = $("budget-progress-track");
   const progressFill = $("budget-progress-fill");
+  const setBudgetBtnEl = $("set-budget-btn");
+  const pastLockBtnEl = $("past-month-lock-btn");
+  const unrestrictedNotice = $("unrestricted-budget-notice");
+  const unrestrictedNoticeText = $("unrestricted-budget-notice-text");
+  const pastNotice = $("past-month-notice");
+  const pastNoticeText = $("past-month-notice-text");
+  const pastNoticeBtn = $("past-month-notice-btn");
 
   if (summarySpent) summarySpent.textContent = fmt(spent);
 
-  if (monthlyBudget > 0) {
-    if (summaryBudget) summaryBudget.textContent = fmt(monthlyBudget);
-    const remaining = monthlyBudget - spent;
+  if (past) {
+    // Past Month History View: hide irrelevant forward-looking details (Remaining, Set Budget)
+    if (setBudgetBtnEl) setBudgetBtnEl.classList.add("hidden");
+    if (pastLockBtnEl) {
+      pastLockBtnEl.classList.remove("hidden");
+      pastLockBtnEl.classList.toggle("unlocked", Boolean(rec.unlocked));
+      pastLockBtnEl.textContent = rec.unlocked ? "Unlocked" : "Locked";
+    }
+    if (summaryGrid) summaryGrid.classList.add("two-col");
+    if (summaryStatRemaining) summaryStatRemaining.classList.add("hidden");
+    if (progressTrack) progressTrack.classList.add("hidden");
+    if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
+
+    if (summarySpentLabel) summarySpentLabel.textContent = "Total Spent";
+    if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Recorded Budget";
+    const histAllocated = round2(rec.finalAllocated != null ? rec.finalAllocated : (rec.allocated || 0));
+    if (summaryBudget) {
+      summaryBudget.textContent = histAllocated > 0 ? fmt(histAllocated) : "Unrestricted";
+    }
+
+    if (pastNotice && pastNoticeText && pastNoticeBtn) {
+      pastNotice.classList.remove("hidden");
+      pastNotice.classList.toggle("unlocked", Boolean(rec.unlocked));
+      if (rec.unlocked) {
+        pastNoticeText.textContent = "Past month unlocked — Editing expenses updates this month's history only and will not affect your current Budget.";
+        pastNoticeBtn.textContent = "Lock month";
+      } else {
+        const retAmt = round2(rec.returnedToGlobal || 0);
+        pastNoticeText.textContent = histAllocated > 0
+          ? `Past Month History (Locked) · ${retAmt > 0 ? `Returned ${fmt(retAmt)} to Budget.` : "Settled."}`
+          : "Past Month History (Locked) · Unrestricted month.";
+        pastNoticeBtn.textContent = "Unlock";
+      }
+    }
+    return;
+  }
+
+  // Current or Future Month View
+  if (setBudgetBtnEl) {
+    setBudgetBtnEl.classList.remove("hidden");
+    setBudgetBtnEl.textContent = (rec.allocated || 0) > 0 ? "Edit month budget" : "Set month budget";
+  }
+  if (pastLockBtnEl) pastLockBtnEl.classList.add("hidden");
+  if (pastNotice) pastNotice.classList.add("hidden");
+  if (summaryGrid) summaryGrid.classList.remove("two-col");
+  if (summaryStatRemaining) summaryStatRemaining.classList.remove("hidden");
+  if (progressTrack) progressTrack.classList.remove("hidden");
+  if (summarySpentLabel) summarySpentLabel.textContent = "Spent";
+
+  const allocated = round2(rec.allocated || 0);
+  if (allocated > 0) {
+    // Restricted Month Mode
+    if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
+    if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Month Budget";
+    if (summaryBudget) summaryBudget.textContent = fmt(allocated);
+
+    const remaining = round2(allocated - spent);
     if (remaining < 0) {
       if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Over";
       if (summaryRemaining) {
@@ -2856,22 +3833,60 @@ function renderSummaryCard(spent) {
         summaryRemaining.textContent = fmt(remaining);
         summaryRemaining.className = "summary-stat-value safe";
       }
-      const percent = Math.min(100, Math.max(0, (spent / monthlyBudget) * 100));
+      const percent = Math.min(100, Math.max(0, (spent / allocated) * 100));
       if (progressFill) {
         progressFill.style.width = `${percent}%`;
         progressFill.className = "budget-progress-fill";
       }
     }
   } else {
-    if (summaryBudget) summaryBudget.textContent = "$0.00";
-    if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
-    if (summaryRemaining) {
-      summaryRemaining.textContent = "N/A";
-      summaryRemaining.className = "summary-stat-value";
+    // Unrestricted Month Mode (falls back directly to Global Budget)
+    if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Budget (Global)";
+    const effectivePool = round2(globalBudget + (rec.unrestrictedDeducted || 0));
+
+    if (unrestrictedNotice && unrestrictedNoticeText) {
+      unrestrictedNotice.classList.remove("hidden");
+      unrestrictedNoticeText.textContent = effectivePool > 0
+        ? `Unrestricted Month — Expenses deduct directly from your Budget (${fmt(globalBudget)} remaining).`
+        : "Unrestricted Month — No monthly budget set. Expenses will deduct from your Budget.";
     }
-    if (progressFill) {
-      progressFill.style.width = "0%";
-      progressFill.className = "budget-progress-fill";
+
+    if (effectivePool > 0 || spent > 0) {
+      if (summaryBudget) summaryBudget.textContent = fmt(effectivePool);
+      const remaining = round2(effectivePool - spent);
+      if (remaining < 0) {
+        if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Over";
+        if (summaryRemaining) {
+          summaryRemaining.textContent = fmt(Math.abs(remaining));
+          summaryRemaining.className = "summary-stat-value warn";
+        }
+        if (progressFill) {
+          progressFill.style.width = "100%";
+          progressFill.className = "budget-progress-fill over";
+        }
+      } else {
+        if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+        if (summaryRemaining) {
+          summaryRemaining.textContent = fmt(globalBudget);
+          summaryRemaining.className = "summary-stat-value safe";
+        }
+        const percent = effectivePool > 0 ? Math.min(100, Math.max(0, (spent / effectivePool) * 100)) : 0;
+        if (progressFill) {
+          progressFill.style.width = `${percent}%`;
+          progressFill.className = "budget-progress-fill";
+        }
+      }
+    } else {
+      if (summaryBudget) summaryBudget.textContent = "$0.00";
+      if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+      if (summaryRemaining) {
+        summaryRemaining.textContent = "N/A";
+        summaryRemaining.className = "summary-stat-value";
+      }
+      if (progressFill) {
+        progressFill.style.width = "0%";
+        progressFill.className = "budget-progress-fill";
+      }
     }
   }
 }
@@ -3286,30 +4301,55 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
     ? (projected[daysInMonth - 1] != null ? projected[daysInMonth - 1] : currentTotalSpent)
     : currentTotalSpent;
 
+  const ym = toLocalMonthPrefix(viewDate);
+  const past = isPastMonth(ym);
+  const rec = ensureMonthRecord(ym);
+  const allocated = round2(rec.allocated || 0);
+  const isUnrestricted = !past && allocated <= 0;
+  const activeBudgetForCalc = past
+    ? round2(rec.finalAllocated != null ? rec.finalAllocated : allocated)
+    : (allocated > 0 ? allocated : round2(globalBudget + (rec.unrestrictedDeducted || 0)));
+  const budgetTypeLabel = isUnrestricted ? "Budget (Global)" : "monthly budget";
+
   // 5. Calculate Safe Daily Spend Allowance
   const remainingDays = Math.max(1, daysInMonth - today);
   let safeDailyAllowance = 0;
-  if (monthlyBudget > 0 && isCurrentMonth) {
-    const remainingBudgetPool = monthlyBudget - currentTotalSpent - upcomingRecurringTotal;
+  if (activeBudgetForCalc > 0 && isCurrentMonth) {
+    const remainingBudgetPool = activeBudgetForCalc - currentTotalSpent - upcomingRecurringTotal;
     safeDailyAllowance = Math.max(0, remainingBudgetPool / remainingDays);
   }
 
-  // 6. Update Metric Cards
+  // 6. Update Metric Cards (hide Projected & Safe Daily for past months)
+  const projCardEl = $("metric-card-projected");
+  const allowCardEl = $("metric-card-allowance");
+  const paceLabelEl = $("metric-pace-label");
   const projValEl = $("metric-projected");
   const paceValEl = $("metric-pace");
   const allowValEl = $("metric-allowance");
 
+  if (past) {
+    if (projCardEl) projCardEl.classList.add("hidden");
+    if (allowCardEl) allowCardEl.classList.add("hidden");
+    if (metricsEl) metricsEl.classList.add("one-col");
+    if (paceLabelEl) paceLabelEl.textContent = "Daily Average";
+  } else {
+    if (projCardEl) projCardEl.classList.remove("hidden");
+    if (allowCardEl) allowCardEl.classList.remove("hidden");
+    if (metricsEl) metricsEl.classList.remove("one-col");
+    if (paceLabelEl) paceLabelEl.textContent = "Daily Pace";
+  }
+
   if (projValEl) projValEl.textContent = fmt(projectedTotal);
   if (paceValEl) paceValEl.textContent = `${fmt(vBlend)}/day`;
   if (allowValEl) {
-    allowValEl.textContent = monthlyBudget > 0 ? `${fmt(safeDailyAllowance)}/day` : "N/A";
+    allowValEl.textContent = activeBudgetForCalc > 0 ? `${fmt(safeDailyAllowance)}/day` : "N/A";
   }
 
-  if (monthlyBudget > 0 && isCurrentMonth) {
-    if (projectedTotal > monthlyBudget) {
+  if (activeBudgetForCalc > 0 && isCurrentMonth) {
+    if (projectedTotal > activeBudgetForCalc) {
       if (projValEl) projValEl.className = "metric-value warn";
       if (allowValEl) allowValEl.className = "metric-value warn";
-    } else if (projectedTotal >= 0.85 * monthlyBudget) {
+    } else if (projectedTotal >= 0.85 * activeBudgetForCalc) {
       if (projValEl) projValEl.className = "metric-value caution";
       if (allowValEl) allowValEl.className = "metric-value caution";
     } else {
@@ -3322,46 +4362,56 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
   }
 
   // 7. Render Chart
-  drawChart(labels, actual, projected, monthlyBudget > 0 ? monthlyBudget : null);
+  drawChart(labels, actual, projected, activeBudgetForCalc > 0 ? activeBudgetForCalc : null);
 
   // 8. Note & Multi-tier Warning Messages
   note.textContent = isCurrentMonth
     ? `Trending toward ${fmt(Math.max(0, projectedTotal))} by day ${daysInMonth}` +
       (upcomingRecurringTotal > 0 ? ` (includes ${fmt(upcomingRecurringTotal)} upcoming bills)` : "") +
-      (monthlyBudget > 0 ? ` with budget of ${fmt(monthlyBudget)}.` : ".")
+      (activeBudgetForCalc > 0 ? ` against ${fmt(activeBudgetForCalc)} ${budgetTypeLabel}.` : ".")
     : isFutureMonth
       ? `${fmt(projectedTotal)} scheduled this month.`
-      : `${fmt(projectedTotal)} spent this month.`;
+      : `${fmt(projectedTotal)} spent in ${formatMonthYearLabel(ym)}.`;
 
   const warningText = $("budget-warning-text");
   warning.className = "warning hidden";
 
-  if (monthlyBudget > 0) {
+  if (activeBudgetForCalc > 0 || (!past && currentTotalSpent > 0)) {
     warning.classList.remove("hidden");
-    if (currentTotalSpent > monthlyBudget) {
+    if (currentTotalSpent > activeBudgetForCalc) {
       warning.classList.add("critical");
+      const overAmt = round2(currentTotalSpent - activeBudgetForCalc);
+      const directCov = round2(rec.directCovered || 0);
+      const covSuffix = (!past && !isUnrestricted && directCov > 0)
+        ? ` (${fmt(Math.min(overAmt, directCov))} compensated directly from Budget).`
+        : ".";
       warningText.textContent = isCurrentMonth
-        ? `Over Budget: You've spent ${fmt(currentTotalSpent)} of your ${fmt(monthlyBudget)} budget (${fmt(currentTotalSpent - monthlyBudget)} over limit). Safe daily allowance is ${fmt(0)}.`
+        ? isUnrestricted
+          ? `Global Over-Budget: You've spent ${fmt(currentTotalSpent)}, exceeding your available Budget (${fmt(activeBudgetForCalc)}) by ${fmt(overAmt)}. Safe daily allowance is ${fmt(0)}.`
+          : `Month Over-Budget: You've spent ${fmt(currentTotalSpent)} of your ${fmt(activeBudgetForCalc)} monthly budget (${fmt(overAmt)} over limit)${covSuffix} Safe daily allowance is ${fmt(0)}.`
         : isFutureMonth
-          ? `Over Budget: Scheduled expenses of ${fmt(currentTotalSpent)} already exceed your ${fmt(monthlyBudget)} budget by ${fmt(currentTotalSpent - monthlyBudget)}.`
-          : `Over Budget: Month ended ${fmt(currentTotalSpent - monthlyBudget)} over budget (${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)}).`;
-    } else if (isCurrentMonth && projectedTotal > monthlyBudget) {
-      const overage = projectedTotal - monthlyBudget;
+          ? isUnrestricted
+            ? `Global Over-Budget: Scheduled expenses of ${fmt(currentTotalSpent)} exceed your available Budget (${fmt(activeBudgetForCalc)}) by ${fmt(overAmt)}.`
+            : `Month Over-Budget: Scheduled expenses of ${fmt(currentTotalSpent)} exceed your ${fmt(activeBudgetForCalc)} monthly budget by ${fmt(overAmt)}${covSuffix}`
+          : `Historical Over-Budget: Month ended ${fmt(overAmt)} over its ${fmt(activeBudgetForCalc)} recorded budget (${fmt(currentTotalSpent)} spent).`;
+    } else if (isCurrentMonth && projectedTotal > activeBudgetForCalc) {
+      const overage = round2(projectedTotal - activeBudgetForCalc);
       warning.classList.add("critical");
-      warningText.textContent = `Budget Warning: At your current pace (${fmt(vBlend)}/day + upcoming bills), projected spending is ${fmt(projectedTotal)}, which is ${fmt(overage)} over your ${fmt(monthlyBudget)} budget. Limit daily variable spending to ${fmt(safeDailyAllowance)}/day.`;
-    } else if (isCurrentMonth && projectedTotal >= 0.85 * monthlyBudget) {
-      const pct = Math.round((projectedTotal / monthlyBudget) * 100);
+      warningText.textContent = `Budget Warning: At your current pace (${fmt(vBlend)}/day + upcoming bills), projected spending is ${fmt(projectedTotal)}, which is ${fmt(overage)} over your ${fmt(activeBudgetForCalc)} ${budgetTypeLabel}. Limit daily variable spending to ${fmt(safeDailyAllowance)}/day.`;
+    } else if (isCurrentMonth && projectedTotal >= 0.85 * activeBudgetForCalc) {
+      const pct = Math.round((projectedTotal / activeBudgetForCalc) * 100);
       warning.classList.add("caution");
-      warningText.textContent = `Budget Caution: On track to spend ${fmt(projectedTotal)} (${pct}% of your ${fmt(monthlyBudget)} budget). To stay within budget, aim to keep daily spend around ${fmt(safeDailyAllowance)}/day.`;
+      warningText.textContent = `Budget Caution: On track to spend ${fmt(projectedTotal)} (${pct}% of your ${fmt(activeBudgetForCalc)} ${budgetTypeLabel}). To stay within budget, aim to keep daily spend around ${fmt(safeDailyAllowance)}/day.`;
     } else if (isCurrentMonth) {
-      const pct = Math.round((projectedTotal / monthlyBudget) * 100);
+      const pct = Math.round((projectedTotal / activeBudgetForCalc) * 100);
       warning.classList.add("safe");
-      warningText.textContent = `On Track: Projected total is ${fmt(projectedTotal)} (${pct}% of your ${fmt(monthlyBudget)} budget). Safe daily target: ${fmt(safeDailyAllowance)}/day.`;
+      warningText.textContent = `On Track: Projected total is ${fmt(projectedTotal)} (${pct}% of your ${fmt(activeBudgetForCalc)} ${budgetTypeLabel}). Safe daily target: ${fmt(safeDailyAllowance)}/day.`;
     } else {
       warning.classList.add("safe");
+      const retAmt = round2(rec.returnedToGlobal || 0);
       warningText.textContent = isFutureMonth
-        ? `Within budget so far: ${fmt(currentTotalSpent)} scheduled of ${fmt(monthlyBudget)} budget.`
-        : `Ended within budget: ${fmt(currentTotalSpent)} spent of ${fmt(monthlyBudget)} budget.`;
+        ? `Within budget so far: ${fmt(currentTotalSpent)} scheduled of ${fmt(activeBudgetForCalc)} ${budgetTypeLabel}.`
+        : `Ended within budget: ${fmt(currentTotalSpent)} spent of ${fmt(activeBudgetForCalc)} recorded budget${retAmt > 0 ? ` (${fmt(retAmt)} returned to Budget)` : ""}.`;
     }
   }
 }

@@ -528,7 +528,7 @@
       <!-- SPENDING & BUDGET SUMMARY CARD -->
       <div id="summary-card" class="summary-card">
         <div class="summary-card-head">
-          <span class="summary-card-title">Overview</span>
+          <span class="summary-card-title" id="summary-card-title">Overview</span>
           <div style="display: flex; align-items: center; gap: 8px;">
             <button
               id="currency-btn"
@@ -551,28 +551,49 @@
                 <path d="M20 16H4M9 12l-5 4 5 4" />
               </svg>
             </button>
-            <button id="set-budget-btn" class="link-btn" style="font-size: 12px; font-weight: 700;">Set budget</button>
+            <button id="set-budget-btn" class="link-btn" style="font-size: 12px; font-weight: 700;">Set month budget</button>
+            <button id="past-month-lock-btn" class="past-lock-chip hidden" type="button">Locked</button>
           </div>
         </div>
 
-        <div class="summary-grid">
-          <div class="summary-stat">
-            <span class="summary-stat-label">Spent</span>
+        <div id="global-budget-bar" class="global-budget-bar">
+          <div class="global-budget-info">
+            <span class="global-budget-label">Budget</span>
+            <span id="global-budget-value" class="global-budget-value">$0.00</span>
+          </div>
+          <button id="open-global-budget-btn" class="global-budget-action-btn" type="button">
+            + Add / History
+          </button>
+        </div>
+
+        <div id="summary-grid" class="summary-grid">
+          <div id="summary-stat-spent" class="summary-stat">
+            <span class="summary-stat-label" id="summary-spent-label">Spent</span>
             <span id="summary-spent" class="summary-stat-value">$0.00</span>
           </div>
-          <div class="summary-stat">
-            <span class="summary-stat-label">Budget</span>
+          <div id="summary-stat-budget" class="summary-stat">
+            <span class="summary-stat-label" id="summary-budget-label">Month Budget</span>
             <span id="summary-budget" class="summary-stat-value primary">$0.00</span>
           </div>
-          <div class="summary-stat">
+          <div id="summary-stat-remaining" class="summary-stat">
             <span class="summary-stat-label" id="summary-remaining-label">Remaining</span>
             <span id="summary-remaining" class="summary-stat-value safe">$0.00</span>
           </div>
         </div>
 
-        <div class="budget-progress-track">
+        <div id="budget-progress-track" class="budget-progress-track">
           <div id="budget-progress-fill" class="budget-progress-fill"></div>
         </div>
+      </div>
+
+      <div id="unrestricted-budget-notice" class="unrestricted-notice hidden">
+        <span id="unrestricted-budget-notice-text"></span>
+        <button type="button" id="unrestricted-set-budget-btn" class="link-btn" style="font-size: 12px; font-weight: 700; white-space: nowrap;">Set month budget</button>
+      </div>
+
+      <div id="past-month-notice" class="past-month-notice hidden">
+        <span id="past-month-notice-text"></span>
+        <button type="button" id="past-month-notice-btn" class="link-btn" style="font-size: 12px; font-weight: 700; white-space: nowrap;">Unlock</button>
       </div>
 
       <div id="budget-warning" class="warning hidden">
@@ -584,15 +605,15 @@
           <h2>Analytics & Forecast</h2>
         </div>
         <div id="forecast-metrics" class="forecast-metrics hidden">
-          <div class="metric-card">
+          <div id="metric-card-projected" class="metric-card">
             <span class="metric-label">Projected</span>
             <span id="metric-projected" class="metric-value">$0.00</span>
           </div>
-          <div class="metric-card">
-            <span class="metric-label">Daily Pace</span>
+          <div id="metric-card-pace" class="metric-card">
+            <span class="metric-label" id="metric-pace-label">Daily Pace</span>
             <span id="metric-pace" class="metric-value">$0.00</span>
           </div>
-          <div class="metric-card">
+          <div id="metric-card-allowance" class="metric-card">
             <span class="metric-label">Safe Daily</span>
             <span id="metric-allowance" class="metric-value">$0.00</span>
           </div>
@@ -781,21 +802,171 @@
       </div>
     </div>
 
-    <!-- BUDGET SHEET -->
+    <!-- MONTH BUDGET SHEET -->
     <div id="budget-sheet" class="sheet hidden">
       <div class="sheet-content">
         <div class="sheet-handle"></div>
-        <h2>Monthly budget</h2>
+        <h2 id="month-budget-sheet-title">Month budget</h2>
+        <p id="month-budget-pool-sub" class="sheet-sub">
+          Available in Budget: <strong id="month-sheet-global-avail">$0.00</strong>
+          &middot; Max for month: <strong id="month-sheet-max-alloc">$0.00</strong>
+        </p>
         <form id="budget-form">
-          <label for="budget-input">Budget amount</label>
-          <input type="number" id="budget-input" step="1" min="0" required />
+          <label for="budget-input">Month budget amount</label>
+          <input type="number" id="budget-input" step="any" min="0" required />
+
+          <div class="budget-slider-section">
+            <div class="budget-slider-head">
+              <label for="month-budget-slider" class="budget-slider-label" style="margin: 0;">Allocate from Budget</label>
+              <span id="month-budget-slider-pct" class="budget-slider-pct">0%</span>
+            </div>
+            <div class="budget-slider-wrap">
+              <div class="budget-slider-track">
+                <div id="month-budget-slider-fill" class="budget-slider-fill"></div>
+              </div>
+              <input
+                type="range"
+                id="month-budget-slider"
+                class="budget-slider-input"
+                aria-label="Allocate from Budget"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+              />
+            </div>
+            <div class="budget-pct-chips">
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="25">25%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="50">50%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="75">75%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="100">ALL</button>
+            </div>
+          </div>
+
+          <div id="month-budget-sheet-notice" class="sheet-inline-notice hidden"></div>
+
           <div class="sheet-actions">
+            <button type="button" id="unrestrict-month-budget-btn" class="btn-ghost hidden" style="color: var(--warn);">
+              Unrestrict
+            </button>
             <button type="button" id="cancel-budget" class="btn-ghost">
               Cancel
             </button>
-            <button type="submit" class="btn-primary">Save</button>
+            <button type="submit" id="save-month-budget-btn" class="btn-primary">Save</button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <!-- GLOBAL BUDGET & HISTORY SHEET -->
+    <div id="global-budget-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <div class="settings-header" style="margin-bottom: 6px;">
+          <h2>Budget</h2>
+          <button
+            type="button"
+            id="close-global-budget-btn"
+            class="icon-btn"
+            aria-label="Close budget sheet"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="global-sheet-balance-card">
+          <span class="global-sheet-balance-label">Available Unallocated Budget</span>
+          <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+        </div>
+
+        <form id="global-budget-form" style="margin-bottom: 18px;">
+          <label for="global-budget-amount-input">Add to budget</label>
+          <input
+            type="number"
+            id="global-budget-amount-input"
+            step="any"
+            min="0.01"
+            placeholder="0.00"
+            required
+          />
+          <label for="global-budget-desc-input">Description (optional)</label>
+          <input
+            type="text"
+            id="global-budget-desc-input"
+            maxlength="60"
+            placeholder="e.g. Salary, Allowance, Freelance"
+          />
+          <div class="sheet-actions" style="margin-top: 12px;">
+            <button type="submit" class="btn-primary" style="width: 100%;">+ Add Budget</button>
+          </div>
+        </form>
+
+        <div class="budget-history-section">
+          <div class="budget-history-head">
+            <h3>Budget History</h3>
+            <button type="button" id="clear-budget-history-btn" class="link-btn hidden" style="color: var(--warn); font-size: 12px; font-weight: 700;">
+              Clear all
+            </button>
+          </div>
+
+          <div id="clear-budget-confirm-box" class="clear-budget-confirm-box hidden">
+            <p>How would you like to clear budget history?</p>
+            <div class="clear-budget-confirm-actions">
+              <button type="button" id="clear-history-log-only-btn" class="btn-ghost" style="font-size: 12px;">
+                Clear Log Only
+              </button>
+              <button type="button" id="clear-history-reset-all-btn" class="btn-danger" style="font-size: 12px;">
+                Reset Budget ($0) &amp; Clear
+              </button>
+              <button type="button" id="cancel-clear-history-btn" class="btn-ghost" style="font-size: 12px;">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <ul id="budget-history-list" class="budget-history-list"></ul>
+          <p id="budget-history-empty" class="empty">No budget additions recorded yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVER-BUDGET RESOLUTION SHEET -->
+    <div id="overbudget-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="overbudget-sheet-title">Budget Exceeded</h2>
+        <div id="overbudget-sheet-desc" class="warning critical" style="margin-top: 10px; margin-bottom: 16px;"></div>
+        <div class="overbudget-actions">
+          <button type="button" id="overbudget-increase-month-btn" class="btn-primary">
+            Add to Month Budget
+          </button>
+          <button type="button" id="overbudget-deduct-global-btn" class="btn-ghost">
+            Instant Deduction from Budget
+          </button>
+          <button type="button" id="overbudget-force-save-btn" class="btn-danger hidden">
+            Use Available &amp; Log Over-Budget
+          </button>
+          <button type="button" id="overbudget-open-global-btn" class="btn-ghost">
+            + Add Funds to Budget First
+          </button>
+          <button type="button" id="overbudget-cancel-btn" class="btn-ghost">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNLOCK PAST MONTH SHEET -->
+    <div id="unlock-past-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="unlock-past-sheet-title">Unlock Past Month?</h2>
+        <p id="unlock-past-sheet-desc" class="sheet-sub" style="margin-top: 8px; line-height: 1.5;">
+          Past months are locked to protect your historical records. Unlocking lets you add, edit, or delete historical expenses for this month (updating its total spent and analytics), without affecting your current Budget.
+        </p>
+        <div class="sheet-actions">
+          <button type="button" id="cancel-unlock-past-btn" class="btn-ghost">Cancel</button>
+          <button type="button" id="confirm-unlock-past-btn" class="btn-primary">Unlock Month</button>
+        </div>
       </div>
     </div>
 
