@@ -2328,9 +2328,10 @@ async function nativeFetch(url, options = {}) {
         responseType: isArrayBuffer ? "arraybuffer" : "text"
       });
 
-      if (res && res.status >= 200 && res.status < 300) {
+      if (res && typeof res.status === "number") {
+        const isOk = res.status >= 200 && res.status < 300;
         let rawData = res.data;
-        if (isArrayBuffer && typeof rawData === "string") {
+        if (isOk && isArrayBuffer && typeof rawData === "string") {
           const binaryString = atob(rawData);
           const len = binaryString.length;
           const bytes = new Uint8Array(len);
@@ -2346,7 +2347,7 @@ async function nativeFetch(url, options = {}) {
           };
         }
         return {
-          ok: true,
+          ok: isOk,
           status: res.status,
           headers: new Headers(res.headers || {}),
           json: async () => (typeof rawData === "string" ? JSON.parse(rawData) : rawData),
@@ -2362,6 +2363,144 @@ async function nativeFetch(url, options = {}) {
   return fetch(url, options);
 }
 
+const STARTUP_UPDATE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+function parseSizeTextToBytes(text) {
+  if (!text) return 0;
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(B|KB|MB|GB)\b/i);
+  if (!match) return 0;
+  const val = parseFloat(match[1]) || 0;
+  const unit = match[2].toUpperCase();
+  if (unit === "GB") return Math.round(val * 1024 * 1024 * 1024);
+  if (unit === "MB") return Math.round(val * 1024 * 1024);
+  if (unit === "KB") return Math.round(val * 1024);
+  return Math.round(val);
+}
+
+async function fetchReleaseViaCdnAndWeb() {
+  let latestTag = `v${APP_VERSION.replace(/^v/i, "")}`;
+  try {
+    const atomRes = await nativeFetch(`https://github.com/${GITHUB_REPO}/releases.atom?_t=${Date.now()}`);
+    if (atomRes && atomRes.ok) {
+      const atomXml = await atomRes.text();
+      const tagMatch = atomXml.match(/\/releases\/tag\/([^"'<>?\s]+)/i);
+      if (tagMatch && tagMatch[1]) {
+        latestTag = decodeURIComponent(tagMatch[1].trim());
+      }
+    }
+  } catch (e) {
+    console.warn("[OTA] Atom feed fetch failed:", e);
+  }
+
+  // 1. Primary: Fetch CDN-hosted ota-manifest.json (pure JSON, zero API rate limit)
+  try {
+    const manifestUrl = `https://github.com/${GITHUB_REPO}/releases/download/${encodeURIComponent(latestTag)}/ota-manifest.json?_t=${Date.now()}`;
+    const manifestRes = await nativeFetch(manifestUrl);
+    if (manifestRes && manifestRes.ok) {
+      const manifest = await manifestRes.json();
+      if (manifest && manifest.tag_name && Array.isArray(manifest.assets)) {
+        safeSet("budgelist-cached-release-json", JSON.stringify(manifest));
+        return manifest;
+      }
+    }
+  } catch (e) {
+    console.warn("[OTA] CDN ota-manifest.json not available, trying expanded_assets:", e);
+  }
+
+  // 2. Secondary: Parse GitHub expanded_assets HTML fragment (also zero API rate limit)
+  const assetsUrl = `https://github.com/${GITHUB_REPO}/releases/expanded_assets/${encodeURIComponent(latestTag)}?_t=${Date.now()}`;
+  const assetsRes = await nativeFetch(assetsUrl);
+  if (!assetsRes || !assetsRes.ok) return null;
+
+  const html = await assetsRes.text();
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const assets = [];
+
+  doc.querySelectorAll("li").forEach((li) => {
+    const link = li.querySelector('a[href*="/releases/download/"]');
+    if (!link) return;
+    const href = link.getAttribute("href") || "";
+    const downloadUrl = href.startsWith("http") ? href : `https://github.com${href}`;
+    const name = decodeURIComponent(href.split("/").pop() || link.textContent.trim());
+    if (name === "ota-manifest.json") return;
+    const timeEl = li.querySelector("relative-time[datetime]");
+    const updatedAt = timeEl ? timeEl.getAttribute("datetime") || "" : "";
+    const sizeBytes = parseSizeTextToBytes(li.textContent || "");
+
+    assets.push({
+      name,
+      browser_download_url: downloadUrl,
+      size: sizeBytes,
+      updated_at: updatedAt,
+    });
+  });
+
+  if (assets.length === 0) return null;
+
+  const fallbackRelease = {
+    tag_name: latestTag,
+    html_url: `https://github.com/${GITHUB_REPO}/releases/tag/${latestTag}`,
+    body: "",
+    assets,
+  };
+  safeSet("budgelist-cached-release-json", JSON.stringify(fallbackRelease));
+  return fallbackRelease;
+}
+
+async function fetchLatestRelease(isStartup = false) {
+  // Use 10-minute cooldown cache for automatic startup checks to avoid redundant network traffic
+  if (isStartup) {
+    const lastCheckTs = Number(safeGet("budgelist-last-startup-check-ts") || 0);
+    const cachedRaw = safeGet("budgelist-cached-release-json");
+    if (cachedRaw && Date.now() - lastCheckTs < STARTUP_UPDATE_COOLDOWN_MS) {
+      try {
+        return JSON.parse(cachedRaw);
+      } catch (e) {}
+    }
+  }
+
+  // 1. Primary: Rate-limit-free GitHub CDN (ota-manifest.json / expanded_assets)
+  try {
+    const cdnRelease = await fetchReleaseViaCdnAndWeb();
+    if (cdnRelease) {
+      if (isStartup) safeSet("budgelist-last-startup-check-ts", String(Date.now()));
+      return cdnRelease;
+    }
+  } catch (e) {
+    console.warn("[OTA] Primary CDN release check failed:", e);
+  }
+
+  // 2. Fallback: GitHub REST API (60 req/hr per IP)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const res = await nativeFetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1&_t=${Date.now()}`, {
+      headers: { Accept: "application/vnd.github.v3+json" },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (res && res.ok) {
+      const releases = await res.json();
+      if (Array.isArray(releases) && releases.length > 0) {
+        safeSet("budgelist-cached-release-json", JSON.stringify(releases[0]));
+        if (isStartup) safeSet("budgelist-last-startup-check-ts", String(Date.now()));
+        return releases[0];
+      }
+    }
+  } catch (e) {
+    console.warn("[OTA] GitHub REST API fallback failed:", e);
+  }
+
+  // 3. Final offline/rate-limit fallback: last known cached release metadata
+  try {
+    const cached = safeGet("budgelist-cached-release-json");
+    if (cached) return JSON.parse(cached);
+  } catch (e) {}
+
+  return null;
+}
+
 async function checkForAppUpdates(isStartup = false, silent = false) {
   if (!silent) showToast("Checking for updates...");
   const online = await checkNetworkConnection();
@@ -2371,58 +2510,47 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
   }
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await nativeFetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1&_t=${Date.now()}`, {
-      headers: { Accept: "application/vnd.github.v3+json", "Cache-Control": "no-cache" },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+    const latest = await fetchLatestRelease(isStartup);
+    if (latest) {
+      const info = inspectReleaseAssets(latest);
 
-    if (res.ok) {
-      const releases = await res.json();
-      if (Array.isArray(releases) && releases.length > 0) {
-        const latest = releases[0];
-        const info = inspectReleaseAssets(latest);
-
-        if (!isStartup) {
-          showManualUpdateModal(info);
-          return true;
-        }
-
-        // Startup Mode: Never auto-download. Check Native APK first, then Stable OTA (ignore Unstable OTA).
-        if (info.hasNativeUpdate) {
-          const isMandatory = isMandatoryUpdate(info.latestTag, APP_VERSION, latest.body);
-          const skippedTag = safeGet("budgelist-skipped-update");
-          if (!isMandatory && skippedTag === info.latestTag) {
-            return false;
-          }
-          showStartupUpdateModal({
-            type: "native",
-            latestTag: info.latestTag,
-            downloadUrl: info.apkAsset?.browser_download_url || info.releaseUrl,
-            isForced: isMandatory,
-            asset: info.apkAsset,
-          });
-          return true;
-        }
-
-        if (info.hasStableOtaUpdate && info.stableAsset) {
-          const skippedOtaKey = safeGet("budgelist-skipped-ota-key");
-          if (skippedOtaKey === info.stableKey) {
-            return false;
-          }
-          showStartupUpdateModal({
-            type: "stable-ota",
-            latestTag: info.latestTag,
-            asset: info.stableAsset,
-            bundleKey: info.stableKey,
-          });
-          return true;
-        }
-
-        return false;
+      if (!isStartup) {
+        showManualUpdateModal(info);
+        return true;
       }
+
+      // Startup Mode: Never auto-download. Check Native APK first, then Stable OTA (ignore Unstable OTA).
+      if (info.hasNativeUpdate) {
+        const isMandatory = isMandatoryUpdate(info.latestTag, APP_VERSION, latest.body);
+        const skippedTag = safeGet("budgelist-skipped-update");
+        if (!isMandatory && skippedTag === info.latestTag) {
+          return false;
+        }
+        showStartupUpdateModal({
+          type: "native",
+          latestTag: info.latestTag,
+          downloadUrl: info.apkAsset?.browser_download_url || info.releaseUrl,
+          isForced: isMandatory,
+          asset: info.apkAsset,
+        });
+        return true;
+      }
+
+      if (info.hasStableOtaUpdate && info.stableAsset) {
+        const skippedOtaKey = safeGet("budgelist-skipped-ota-key");
+        if (skippedOtaKey === info.stableKey) {
+          return false;
+        }
+        showStartupUpdateModal({
+          type: "stable-ota",
+          latestTag: info.latestTag,
+          asset: info.stableAsset,
+          bundleKey: info.stableKey,
+        });
+        return true;
+      }
+
+      return false;
     }
     if (!silent) showToast(`Could not fetch release info (v${APP_VERSION})`);
   } catch (e) {
@@ -5294,9 +5422,10 @@ if (appScreenEl && pullIndicator) {
   });
 }
 
-// ---------- Background Scroll Lock for Modals & Sheets ----------
+// ---------- Background Scroll Lock & Layered Back Navigation ----------
 function updateBodyScrollLock() {
-  const hasOpenModal = document.querySelectorAll(".sheet:not(.hidden), .modal:not(.hidden)").length > 0;
+  const hasOpenModal =
+    document.querySelectorAll(".sheet:not(.hidden), .modal:not(.hidden), .modal-overlay:not(.hidden)").length > 0;
   if (hasOpenModal) {
     document.body.style.overflow = "hidden";
   } else {
@@ -5309,8 +5438,164 @@ const modalObserver = new MutationObserver(() => {
 });
 
 setTimeout(() => {
-  document.querySelectorAll(".sheet, .modal").forEach((el) => {
+  document.querySelectorAll(".sheet, .modal, .modal-overlay").forEach((el) => {
     modalObserver.observe(el, { attributes: true, attributeFilter: ["class"] });
   });
   updateBodyScrollLock();
 }, 200);
+
+function isOverlayVisible(id) {
+  const el = $(id);
+  return Boolean(el && !el.classList.contains("hidden"));
+}
+
+function closeTopmostOverlayLayer() {
+  // 1. Open custom select dropdowns
+  const openSelects = document.querySelectorAll(".custom-select-wrapper.open");
+  if (openSelects.length > 0) {
+    closeAllCustomSelects();
+    return true;
+  }
+
+  // 2. Date & Calendar popovers
+  if (isOverlayVisible("expense-date-popover")) {
+    closeExpenseCalendar();
+    return true;
+  }
+  if (isOverlayVisible("calendar-popover")) {
+    closeCalendar();
+    return true;
+  }
+
+  // 3. Modal Overlays (stacked on top of sheets or main screen)
+  if (isOverlayVisible("network-modal")) {
+    if ($("cancel-network")) $("cancel-network").click();
+    else $("network-modal").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("update-modal")) {
+    const isStartupView = isOverlayVisible("update-startup-view");
+    if (isStartupView && pendingStartupUpdate && pendingStartupUpdate.isForced) {
+      // Mandatory update cannot be dismissed into the app
+      return false;
+    }
+    if (isStartupView && $("cancel-update-btn")) {
+      $("cancel-update-btn").click();
+    } else {
+      closeUpdateModal();
+    }
+    return true;
+  }
+
+  if (isOverlayVisible("avatar-modal")) {
+    $("avatar-modal").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("password-modal")) {
+    if ($("cancel-password")) $("cancel-password").click();
+    else $("password-modal").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("email-modal")) {
+    if ($("cancel-email")) $("cancel-email").click();
+    else $("email-modal").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("currency-modal")) {
+    if (isOverlayVisible("currency-change-view") || isOverlayVisible("currency-convert-view")) {
+      if ($("back-currency-menu")) $("back-currency-menu").click();
+      return true;
+    }
+    $("currency-modal").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("guest-modal")) {
+    $("guest-modal").classList.add("hidden");
+    return true;
+  }
+
+  // 4. Bottom Sheets (ordered from nested/secondary sheets down to base sheets)
+  if (isOverlayVisible("overbudget-sheet")) {
+    closeOverbudgetSheet();
+    return true;
+  }
+
+  if (isOverlayVisible("unlock-past-sheet")) {
+    closeUnlockPastSheet();
+    return true;
+  }
+
+  if (isOverlayVisible("global-budget-sheet")) {
+    if (isOverlayVisible("clear-budget-confirm-box")) {
+      $("clear-budget-confirm-box").classList.add("hidden");
+      return true;
+    }
+    closeGlobalBudgetSheet();
+    return true;
+  }
+
+  if (isOverlayVisible("budget-sheet")) {
+    if ($("cancel-budget")) $("cancel-budget").click();
+    else $("budget-sheet").classList.add("hidden");
+    return true;
+  }
+
+  if (isOverlayVisible("recurring-sheet")) {
+    closeRecurringSheet();
+    return true;
+  }
+
+  if (isOverlayVisible("add-sheet")) {
+    closeExpenseSheet();
+    return true;
+  }
+
+  if (isOverlayVisible("settings-sheet")) {
+    closeSettingsSheet();
+    return true;
+  }
+
+  // 5. Auth screen sub-mode (Create account -> Log in)
+  if (isOverlayVisible("auth-screen") && authMode === "signup") {
+    setAuthMode("login");
+    return true;
+  }
+
+  return false;
+}
+
+let lastBackExitAttempt = 0;
+
+window.__handleAndroidBack = function __handleAndroidBack() {
+  if (closeTopmostOverlayLayer()) {
+    lastBackExitAttempt = 0;
+    return "HANDLED";
+  }
+
+  if (isOtaUpdating) {
+    showToast("Please wait, installing update...");
+    return "HANDLED";
+  }
+
+  const now = Date.now();
+  if (now - lastBackExitAttempt < 2000) {
+    return "EXIT";
+  }
+
+  lastBackExitAttempt = now;
+  showToast("Press back again to exit");
+  return "HANDLED";
+};
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (closeTopmostOverlayLayer()) {
+      e.preventDefault();
+    }
+  }
+});

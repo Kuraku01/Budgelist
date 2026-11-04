@@ -80,3 +80,13 @@ jobs:
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate & Attach Rate-Limit-Free OTA Manifest (ota-manifest.json)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REL_TAG: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/tags/${REL_TAG}" \
+            --jq '{tag_name: .tag_name, html_url: .html_url, body: (.body // ""), published_at: .published_at, assets: [.assets[] | select(.name != "ota-manifest.json") | {id: .id, name: .name, size: .size, updated_at: .updated_at, browser_download_url: .browser_download_url}]}' \
+            > ota-manifest.json
+          gh release upload "${REL_TAG}" ota-manifest.json --clobber

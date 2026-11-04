@@ -17,6 +17,9 @@
       (function checkBundleValidity() {
         var NATIVE_BUILD_KEY = "v0.2.0-beta";
         try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.getNativeBuildSignature === "function") {
+            NATIVE_BUILD_KEY = window.AndroidBridge.getNativeBuildSignature() || NATIVE_BUILD_KEY;
+          }
           var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
           if (currentBuildKey !== NATIVE_BUILD_KEY) {
             console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
