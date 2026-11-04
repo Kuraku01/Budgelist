@@ -7,6 +7,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      channel:
+        description: 'OTA Channel to publish (stable = dist.zip, unstable = dist-unstable.zip)'
+        required: true
+        default: 'unstable'
+        type: choice
+        options:
+          - unstable
+          - stable
 
 permissions:
   contents: write
@@ -25,8 +34,12 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Extract Release Version
+      - name: Extract Release Version & Determine OTA Channel
         id: get_version
+        env:
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          DISPATCH_CHANNEL: ${{ inputs.channel }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           PACKAGE_VER=$(node -p "require('./package.json').version")
           if [[ "$PACKAGE_VER" == v* ]]; then
@@ -35,16 +48,24 @@ jobs:
             echo "version=v$PACKAGE_VER" >> $GITHUB_OUTPUT
           fi
 
+          if [[ "$REF_TYPE" == "tag" ]] || [[ "$DISPATCH_CHANNEL" == "stable" ]] || [[ "$COMMIT_MSG" == *"[stable-ota]"* ]]; then
+            echo "zip_name=dist.zip" >> $GITHUB_OUTPUT
+            echo "channel=stable" >> $GITHUB_OUTPUT
+          else
+            echo "zip_name=dist-unstable.zip" >> $GITHUB_OUTPUT
+            echo "channel=unstable" >> $GITHUB_OUTPUT
+          fi
+
       - name: Install Dependencies
         run: npm ci
 
       - name: Sync Capacitor Android
         run: npx cap sync android
 
-      - name: Package Web Assets Bundle (dist.zip)
+      - name: Package Web Assets Bundle (${{ steps.get_version.outputs.zip_name }})
         run: |
           cd www
-          zip -r ../dist.zip app.js style.css index.html firebase-config.js lib/
+          zip -r "../${{ steps.get_version.outputs.zip_name }}" app.js style.css index.html firebase-config.js lib/
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -52,7 +73,7 @@ jobs:
           tag_name: ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
           name: Budgelist ${{ github.ref_type == 'tag' && github.ref_name || steps.get_version.outputs.version }}
           files: |
-            dist.zip
+            ${{ steps.get_version.outputs.zip_name }}
           overwrite_files: true
           generate_release_notes: ${{ github.ref_type == 'tag' }}
           prerelease: true

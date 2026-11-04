@@ -24,6 +24,9 @@
             localStorage.removeItem("budgelist-bundle-style-css");
             localStorage.removeItem("budgelist-bundle-body-html");
             localStorage.removeItem("budgelist-installed-bundle-key");
+            localStorage.removeItem("budgelist-installed-bundle-channel");
+            localStorage.removeItem("budgelist-installed-bundle-time");
+            localStorage.removeItem("budgelist-skipped-ota-key");
             localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
           }
         } catch (e) {}
@@ -295,48 +298,125 @@
       </div>
     </div>
 
-    <!-- UPDATE AVAILABLE MODAL -->
+    <!-- UPDATE AVAILABLE / UPDATE CENTER MODAL -->
     <div
       id="update-modal"
       class="modal-overlay hidden"
       role="dialog"
       aria-modal="true"
     >
-      <div class="modal-card">
-        <h2 id="update-modal-title">Update Available</h2>
+      <div class="modal-card update-modal-card">
+        <div class="update-modal-head">
+          <h2 id="update-modal-title">Update Available</h2>
+          <button
+            type="button"
+            id="close-update-modal-btn"
+            class="icon-btn update-modal-close hidden"
+            aria-label="Close update center"
+          >
+            &times;
+          </button>
+        </div>
         <p id="update-modal-msg">A new version of Budgelist is available for download!</p>
-        <div class="update-version-info">
-          <div class="version-badge-wrap">
-            <span class="version-label">Current</span>
-            <span id="update-current-version" class="version-val">v0.1.2-beta</span>
+
+        <!-- STARTUP CONFIRMATION VIEW (Native APK or Stable OTA Prompt) -->
+        <div id="update-startup-view">
+          <div class="update-version-info">
+            <div class="version-badge-wrap">
+              <span id="update-current-label" class="version-label">Current</span>
+              <span id="update-current-version" class="version-val">v0.2.0-beta</span>
+            </div>
+            <div class="version-arrow">→</div>
+            <div class="version-badge-wrap">
+              <span id="update-latest-label" class="version-label">Latest</span>
+              <span id="update-latest-version" class="version-val highlight">v0.2.0-beta</span>
+            </div>
           </div>
-          <div class="version-arrow">→</div>
-          <div class="version-badge-wrap">
-            <span class="version-label">Latest</span>
-            <span id="update-latest-version" class="version-val highlight">v0.2.0</span>
+          <div id="update-startup-meta" class="update-startup-meta hidden"></div>
+          <div class="modal-actions">
+            <button type="button" id="cancel-update-btn" class="btn-ghost" style="flex: 1;">
+              Later
+            </button>
+            <button type="button" id="download-update-btn" class="btn-primary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <span id="download-update-btn-text">Confirm Update</span>
+              <svg
+                id="download-update-ext-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </button>
           </div>
         </div>
-        <div class="modal-actions">
-          <button type="button" id="cancel-update-btn" class="btn-ghost" style="flex: 1;">
-            Later
+
+        <!-- MANUAL UPDATE CENTER VIEW (Native APK + Stable OTA + Unstable OTA) -->
+        <div id="update-manual-view" class="update-channel-list hidden">
+          <!-- 1. Native App (APK) -->
+          <div class="update-channel-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Native App (APK)</span>
+                  <span id="manual-native-badge" class="channel-badge native">Up to date</span>
+                </div>
+                <p id="manual-native-meta" class="update-channel-meta">Installed: v0.2.0-beta</p>
+              </div>
+              <button type="button" id="manual-native-btn" class="btn-primary update-channel-btn hidden">
+                Download
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Stable OTA Package (dist.zip) -->
+          <div class="update-channel-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Stable Package</span>
+                  <span id="manual-stable-badge" class="channel-badge stable">Stable OTA</span>
+                </div>
+                <p id="manual-stable-meta" class="update-channel-meta">Checking dist.zip...</p>
+              </div>
+              <button type="button" id="manual-stable-btn" class="btn-primary update-channel-btn">
+                Update
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Unstable / Testing OTA Package (dist-unstable.zip) -->
+          <div class="update-channel-card unstable-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Unstable Package</span>
+                  <span id="manual-unstable-badge" class="channel-badge unstable">Testing / Debug</span>
+                </div>
+                <p id="manual-unstable-meta" class="update-channel-meta">Checking dist-unstable.zip...</p>
+              </div>
+              <button type="button" id="manual-unstable-btn" class="btn-ghost update-channel-btn unstable-btn">
+                Install
+              </button>
+            </div>
+          </div>
+
+          <button type="button" id="manual-revert-native-btn" class="btn-ghost update-revert-btn hidden">
+            Revert to Built-in Native Package
           </button>
-          <button type="button" id="download-update-btn" class="btn-primary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
-            Download
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <line x1="10" y1="14" x2="21" y2="3"></line>
-            </svg>
-          </button>
+
+          <div class="modal-actions" style="margin-top: 4px;">
+            <button type="button" id="manual-close-btn" class="btn-ghost" style="width: 100%;">
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1304,7 +1384,10 @@
                 <div class="about-card">
                   <div class="about-brand-row">
                     <span class="brand">Budgelist</span>
-                    <span class="version-badge">v0.2.0-beta</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span id="about-package-channel-badge" class="channel-badge native">Native</span>
+                      <span class="version-badge">v0.2.0-beta</span>
+                    </div>
                   </div>
                   <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
 
