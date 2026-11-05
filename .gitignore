@@ -12,3 +12,5 @@ google-services.json
 *.keystore
 *.apk
 dist.zip
+dist-unstable.zip
+ota-manifest.json

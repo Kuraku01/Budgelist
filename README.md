@@ -11,6 +11,15 @@ The application allows users to manage an overall Budget pool, allocate monthly 
 
 ---
 
+## What's New in v0.2.1-beta
+
+- **Multi-Layer Android Back Navigation**: Native `OnBackPressedCallback` captures back gestures and physical back buttons, closing open UI elements sequentially (custom dropdowns &rarr; date/calendar popovers &rarr; modals &rarr; secondary sheets &rarr; base sheets &rarr; auth sub-views) with double-back confirmation to exit on the root screen.
+- **Dual-Channel Live OTA Engine (`dist.zip` vs. `dist-unstable.zip`)**: Explicit Stable and Testing/Unstable OTA channels, non-blocking startup checks with Confirm/Later prompt, and an integrated **Update Center** in Settings &rarr; About with individual track statuses and a **Revert to Built-in Native Package** option.
+- **Rate-Limit-Free CDN Update Manifest**: Release discovery directly queries CDN-hosted `ota-manifest.json` and GitHub web endpoints, completely bypassing GitHub's 60 req/hr unauthenticated REST API limit, backed by a 10-minute cooldown on background startup checks.
+- **Automatic Native APK Cache Invalidation**: Native APK timestamp tracking (`PackageInfo.lastUpdateTime`) automatically purges stale cached web bundles when a new or rebuilt APK is installed.
+
+---
+
 ## What's New in v0.2.0-beta
 
 - **Two-Tier Global & Monthly Budget System**: Manage an accessible Global Budget pool with a persistent **Budget History** ledger (optional descriptions, individual entry deletion, and log-only vs. full-reset options), and lend monthly budgets via synchronized manual input, smooth animated slider (with spent-floor indicators), and percentage chips (`25%`, `50%`, `75%`, `MAX`).
@@ -66,7 +75,7 @@ The application allows users to manage an overall Budget pool, allocate monthly 
 ### Installing the Android Application
 
 1. Navigate to the [Releases](https://github.com/Kuraku01/Budgelist/releases) page of this repository.
-2. Download the latest `Budgelist_0.2.0-beta.apk` asset.
+2. Download the latest `Budgelist_0.2.1-beta.apk` asset.
 3. Open the downloaded file on your Android device to complete installation.
 
 ### Developer Setup & Building From Source

@@ -101,7 +101,7 @@ public class MainActivity extends BridgeActivity {
                         .getPackageInfo(mContext.getPackageName(), 0);
                 return "v" + pInfo.versionName + "_" + pInfo.lastUpdateTime;
             } catch (Exception e) {
-                return "v0.2.0-beta";
+                return "v0.2.1-beta";
             }
         }
 

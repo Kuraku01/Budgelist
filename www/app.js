@@ -1,4 +1,4 @@
-// OTA Bundle Build Key: v0.2.0-beta
+// OTA Bundle Build Key: v0.2.1-beta
 const {
   firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
@@ -1755,7 +1755,7 @@ document.querySelectorAll(".accordion-header").forEach((header) => {
   });
 });
 
-const APP_VERSION = "0.2.0-beta";
+const APP_VERSION = "0.2.1-beta";
 const GITHUB_REPO = "kuraku01/budgelist";
 let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
 let currentLatestTag = "";

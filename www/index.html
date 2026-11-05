@@ -15,7 +15,7 @@
     <script>
       // Clear stale web bundle if native APK/app build changed (must run before OTA CSS injection)
       (function checkBundleValidity() {
-        var NATIVE_BUILD_KEY = "v0.2.0-beta";
+        var NATIVE_BUILD_KEY = "v0.2.1-beta";
         try {
           if (window.AndroidBridge && typeof window.AndroidBridge.getNativeBuildSignature === "function") {
             NATIVE_BUILD_KEY = window.AndroidBridge.getNativeBuildSignature() || NATIVE_BUILD_KEY;
@@ -327,12 +327,12 @@
           <div class="update-version-info">
             <div class="version-badge-wrap">
               <span id="update-current-label" class="version-label">Current</span>
-              <span id="update-current-version" class="version-val">v0.2.0-beta</span>
+              <span id="update-current-version" class="version-val">v0.2.1-beta</span>
             </div>
             <div class="version-arrow">→</div>
             <div class="version-badge-wrap">
               <span id="update-latest-label" class="version-label">Latest</span>
-              <span id="update-latest-version" class="version-val highlight">v0.2.0-beta</span>
+              <span id="update-latest-version" class="version-val highlight">v0.2.1-beta</span>
             </div>
           </div>
           <div id="update-startup-meta" class="update-startup-meta hidden"></div>
@@ -371,7 +371,7 @@
                   <span class="update-channel-name">Native App (APK)</span>
                   <span id="manual-native-badge" class="channel-badge native">Up to date</span>
                 </div>
-                <p id="manual-native-meta" class="update-channel-meta">Installed: v0.2.0-beta</p>
+                <p id="manual-native-meta" class="update-channel-meta">Installed: v0.2.1-beta</p>
               </div>
               <button type="button" id="manual-native-btn" class="btn-primary update-channel-btn hidden">
                 Download
@@ -1389,7 +1389,7 @@
                     <span class="brand">Budgelist</span>
                     <div style="display: flex; align-items: center; gap: 6px;">
                       <span id="about-package-channel-badge" class="channel-badge native">Native</span>
-                      <span class="version-badge">v0.2.0-beta</span>
+                      <span class="version-badge">v0.2.1-beta</span>
                     </div>
                   </div>
                   <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
@@ -1427,14 +1427,30 @@
                         width: 100%;
                       "
                     >
-                      <span>What's New in v0.2.0-beta</span>
+                      <span>What's New in v0.2.1-beta</span>
                       <span id="release-notes-arrow">▸</span>
                     </button>
                     <div
                       id="release-notes-content"
                       class="release-notes-list hidden"
                     >
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.0-beta</h4>
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.1-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Multi-Layer Android Back Navigation:</strong> Back gestures and buttons now close active UI layers one by one (dropdowns, date popovers, modals, sheets) with double-back confirmation to exit on the root screen.
+                        </li>
+                        <li>
+                          <strong>Dual-Channel Live OTA Engine:</strong> Distinct Stable and Testing/Unstable OTA channels, non-blocking startup check with Confirm/Later prompt, and an integrated Update Center in Settings &rarr; About.
+                        </li>
+                        <li>
+                          <strong>Rate-Limit-Free CDN Update Manifest:</strong> Directly queries CDN-hosted release manifests bypassing GitHub REST API hourly rate limits, with a 10-minute cooldown on background startup checks.
+                        </li>
+                        <li>
+                          <strong>Automatic Native APK Cache Invalidation:</strong> Built-in APK update timestamp detection that automatically purges stale cached web bundles when a new native APK is installed.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.2.0-beta</h4>
                       <ul>
                         <li>
                           <strong>Two-Tier Global &amp; Monthly Budget System:</strong> Manage an overall Budget pool with a detailed addition history log, and lend monthly budgets using a synchronized input, smooth slider, and preset chips.
