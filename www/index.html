@@ -361,14 +361,14 @@
           </div>
         </div>
 
-        <!-- MANUAL UPDATE CENTER VIEW (Native APK + Stable OTA + Unstable OTA) -->
+        <!-- MANUAL UPDATE CENTER VIEW (Android App + Stable Update + Testing / Beta) -->
         <div id="update-manual-view" class="update-channel-list hidden">
-          <!-- 1. Native App (APK) -->
+          <!-- 1. Android App (Full Install) -->
           <div class="update-channel-card">
             <div class="update-channel-row">
               <div class="update-channel-info">
                 <div class="update-channel-title-row">
-                  <span class="update-channel-name">Native App (APK)</span>
+                  <span class="update-channel-name">Android App</span>
                   <span id="manual-native-badge" class="channel-badge native">Up to date</span>
                 </div>
                 <p id="manual-native-meta" class="update-channel-meta">Installed: v0.2.1-beta</p>
@@ -379,15 +379,15 @@
             </div>
           </div>
 
-          <!-- 2. Stable OTA Package (dist.zip) -->
+          <!-- 2. Stable Update (In-App Package) -->
           <div class="update-channel-card">
             <div class="update-channel-row">
               <div class="update-channel-info">
                 <div class="update-channel-title-row">
-                  <span class="update-channel-name">Stable Package</span>
-                  <span id="manual-stable-badge" class="channel-badge stable">Stable OTA</span>
+                  <span class="update-channel-name">Stable Update</span>
+                  <span id="manual-stable-badge" class="channel-badge stable">Stable</span>
                 </div>
-                <p id="manual-stable-meta" class="update-channel-meta">Checking dist.zip...</p>
+                <p id="manual-stable-meta" class="update-channel-meta">Checking for updates...</p>
               </div>
               <button type="button" id="manual-stable-btn" class="btn-primary update-channel-btn">
                 Update
@@ -395,15 +395,15 @@
             </div>
           </div>
 
-          <!-- 3. Unstable / Testing OTA Package (dist-unstable.zip) -->
+          <!-- 3. Testing / Preview Update (In-App Package) -->
           <div class="update-channel-card unstable-card">
             <div class="update-channel-row">
               <div class="update-channel-info">
                 <div class="update-channel-title-row">
-                  <span class="update-channel-name">Unstable Package</span>
-                  <span id="manual-unstable-badge" class="channel-badge unstable">Testing / Debug</span>
+                  <span class="update-channel-name">Testing Build</span>
+                  <span id="manual-unstable-badge" class="channel-badge unstable">Preview</span>
                 </div>
-                <p id="manual-unstable-meta" class="update-channel-meta">Checking dist-unstable.zip...</p>
+                <p id="manual-unstable-meta" class="update-channel-meta">Checking testing build...</p>
               </div>
               <button type="button" id="manual-unstable-btn" class="btn-ghost update-channel-btn unstable-btn">
                 Install
@@ -412,7 +412,7 @@
           </div>
 
           <button type="button" id="manual-revert-native-btn" class="btn-ghost update-revert-btn hidden">
-            Revert to Built-in Native Package
+            Reset to Original App Version
           </button>
 
           <div class="modal-actions" style="margin-top: 4px;">
@@ -1388,10 +1388,11 @@
                   <div class="about-brand-row">
                     <span class="brand">Budgelist</span>
                     <div style="display: flex; align-items: center; gap: 6px;">
-                      <span id="about-package-channel-badge" class="channel-badge native">Native</span>
+                      <span id="about-package-channel-badge" class="channel-badge native">Built-in</span>
                       <span id="about-version-badge" class="version-badge">v0.2.1-beta</span>
                     </div>
                   </div>
+                  <p id="about-version-note" class="about-version-note hidden"></p>
                   <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
 
                   <button
@@ -1440,13 +1441,13 @@
                           <strong>Multi-Layer Android Back Navigation:</strong> Back gestures and buttons now close active UI layers one by one (dropdowns, date popovers, modals, sheets) with double-back confirmation to exit on the root screen.
                         </li>
                         <li>
-                          <strong>Dual-Channel Live OTA Engine:</strong> Distinct Stable and Testing/Unstable OTA channels, non-blocking startup check with Confirm/Later prompt, and an integrated Update Center in Settings &rarr; About.
+                          <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, non-blocking startup update notifications, and a unified Update Center in Settings &rarr; About.
                         </li>
                         <li>
-                          <strong>Rate-Limit-Free CDN Update Manifest:</strong> Directly queries CDN-hosted release manifests bypassing GitHub REST API hourly rate limits, with a 10-minute cooldown on background startup checks.
+                          <strong>Faster &amp; More Reliable Update Checks:</strong> Instant update checks without hourly rate limits, plus a 10-minute cooldown on background startup checks.
                         </li>
                         <li>
-                          <strong>Automatic Native APK Cache Invalidation:</strong> Built-in APK update timestamp detection that automatically purges stale cached web bundles when a new native APK is installed.
+                          <strong>Automatic App Upgrade Cleanup:</strong> Automatically refreshes cached updates whenever a newer Android app installation is detected.
                         </li>
                       </ul>
 

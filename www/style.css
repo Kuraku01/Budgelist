@@ -1461,6 +1461,18 @@ select:focus {
   margin: 4px 0 0;
 }
 
+.about-version-note {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--caution-ink);
+  background: var(--caution-bg);
+  border: 1px solid color-mix(in srgb, var(--caution) 35%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+
 .release-notes-wrap {
   border-top: 1px solid var(--line);
   padding-top: 10px;

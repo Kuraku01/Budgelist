@@ -1822,6 +1822,7 @@ function formatAssetMeta(asset) {
 function updateAboutChannelBadge() {
   const badge = $("about-package-channel-badge");
   const verBadge = $("about-version-badge") || document.querySelector(".about-brand-row .version-badge");
+  const verNote = $("about-version-note");
   if (!badge) return;
   const installedKey = safeGet("budgelist-installed-bundle-key");
   const hasBundleJs = Boolean(safeGet("budgelist-bundle-app-js"));
@@ -1834,24 +1835,31 @@ function updateAboutChannelBadge() {
 
   if (isOtaActive) {
     if (channel === "unstable") {
-      badge.textContent = "Unstable OTA";
+      badge.textContent = "Testing Build";
       badge.className = "channel-badge unstable";
     } else {
-      badge.textContent = "Stable OTA";
+      badge.textContent = "Live Update";
       badge.className = "channel-badge stable";
     }
     if (verBadge) {
+      verBadge.textContent = formatVersionTag(APP_VERSION);
+    }
+    if (verNote) {
       if (NATIVE_APP_VERSION !== APP_VERSION) {
-        verBadge.textContent = `${formatVersionTag(APP_VERSION)} (APK ${formatVersionTag(NATIVE_APP_VERSION)})`;
+        verNote.textContent = `Base Android app is on ${formatVersionTag(NATIVE_APP_VERSION)} — tap Check for updates to install the ${formatVersionTag(APP_VERSION)} app upgrade.`;
+        verNote.classList.remove("hidden");
       } else {
-        verBadge.textContent = formatVersionTag(APP_VERSION);
+        verNote.classList.add("hidden");
       }
     }
   } else {
-    badge.textContent = "Native";
+    badge.textContent = "Built-in";
     badge.className = "channel-badge native";
     if (verBadge) {
       verBadge.textContent = formatVersionTag(NATIVE_APP_VERSION);
+    }
+    if (verNote) {
+      verNote.classList.add("hidden");
     }
   }
 }
@@ -2110,59 +2118,59 @@ function showStartupUpdateModal(options) {
   if (options.type === "stable-ota") {
     const installedChannel = safeGet("budgelist-installed-bundle-channel");
     const hasBundle = Boolean(safeGet("budgelist-installed-bundle-key") && safeGet("budgelist-bundle-app-js"));
-    if (modalTitle) modalTitle.textContent = "Stable Package Update";
+    if (modalTitle) modalTitle.textContent = "In-App Update Available";
     if (modalMsg) {
       modalMsg.textContent =
-        "A new stable over-the-air update package is ready to install. Confirm to download and apply it now.";
+        "A new stable in-app update is ready to install. Confirm to download and apply it now.";
     }
     if (currentLabelEl) currentLabelEl.textContent = "Current";
     if (latestLabelEl) latestLabelEl.textContent = "Update";
     if (currentVerEl) {
       currentVerEl.textContent = hasBundle
         ? installedChannel === "unstable"
-          ? "Unstable OTA"
-          : "Stable OTA"
-        : `Native (${formatVersionTag(NATIVE_APP_VERSION)})`;
+          ? "Testing Build"
+          : "Live Update"
+        : formatVersionTag(NATIVE_APP_VERSION);
     }
-    if (latestVerEl) latestVerEl.textContent = `Stable OTA (${formatVersionTag(options.latestTag)})`;
+    if (latestVerEl) latestVerEl.textContent = formatVersionTag(options.latestTag);
     if (startupMetaEl) {
-      startupMetaEl.textContent = `Package: ${options.asset?.name || "dist.zip"} • ${formatAssetMeta(options.asset)}`;
+      startupMetaEl.textContent = `Stable Update • ${formatAssetMeta(options.asset)}`;
       startupMetaEl.classList.remove("hidden");
     }
     if (btnTextEl) btnTextEl.textContent = "Confirm Update";
     if (extIconEl) extIconEl.classList.add("hidden");
     if (cancelUpdateBtn) cancelUpdateBtn.classList.remove("hidden");
   } else {
-    if (currentLabelEl) currentLabelEl.textContent = "Native APK";
-    if (latestLabelEl) latestLabelEl.textContent = "Latest APK";
+    if (currentLabelEl) currentLabelEl.textContent = "Installed App";
+    if (latestLabelEl) latestLabelEl.textContent = "New App";
     if (currentVerEl) currentVerEl.textContent = formatVersionTag(NATIVE_APP_VERSION);
     if (latestVerEl) latestVerEl.textContent = formatVersionTag(options.latestTag);
     if (options.downloadUrl) updateDownloadUrl = options.downloadUrl;
     if (startupMetaEl) {
       if (options.asset) {
-        startupMetaEl.textContent = `APK: ${options.asset.name} • ${formatAssetMeta(options.asset)}`;
+        startupMetaEl.textContent = `Android Installer • ${formatAssetMeta(options.asset)}`;
         startupMetaEl.classList.remove("hidden");
       } else {
         startupMetaEl.classList.add("hidden");
       }
     }
-    if (btnTextEl) btnTextEl.textContent = "Download APK";
+    if (btnTextEl) btnTextEl.textContent = "Download App";
     if (extIconEl) extIconEl.classList.remove("hidden");
 
     if (options.isForced) {
-      if (modalTitle) modalTitle.textContent = "Update Required";
+      if (modalTitle) modalTitle.textContent = "App Upgrade Required";
       if (modalMsg) {
         modalMsg.textContent =
-          "A new native version of Budgelist is required to continue. Please download and install the APK update.";
+          "A new version of the Android app is required to continue. Please download and install the update.";
       }
       if (cancelUpdateBtn) cancelUpdateBtn.classList.add("hidden");
     } else {
-      if (modalTitle) modalTitle.textContent = "Native APK Update Available";
+      if (modalTitle) modalTitle.textContent = "Android App Upgrade Available";
       if (modalMsg) {
         modalMsg.textContent =
           NATIVE_APP_VERSION !== APP_VERSION
-            ? `Your web bundle is on ${formatVersionTag(APP_VERSION)}, but your installed Android APK is still on ${formatVersionTag(NATIVE_APP_VERSION)}. Download the latest APK for native improvements (like back gesture navigation).`
-            : "A newer native version of Budgelist is available for download!";
+            ? `You have the ${formatVersionTag(APP_VERSION)} live features, but your installed Android app is still on ${formatVersionTag(NATIVE_APP_VERSION)}. Download the latest app installer for system improvements like back-button navigation.`
+            : "A newer version of the Budgelist Android app is available for download!";
       }
       if (cancelUpdateBtn) cancelUpdateBtn.classList.remove("hidden");
     }
@@ -2183,30 +2191,30 @@ function showManualUpdateModal(info) {
 
   const activeChannelLabel = info.hasInstalledBundle
     ? info.installedChannel === "unstable"
-      ? "Unstable OTA"
-      : "Stable OTA"
-    : "Native Built-in";
+      ? "Testing Build"
+      : "Live Update"
+    : "Built-in";
 
   if (modalTitle) modalTitle.textContent = "Update Center";
   if (modalMsg) {
     modalMsg.textContent =
       NATIVE_APP_VERSION !== APP_VERSION
-        ? `Web Bundle: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel}) • Native APK: ${formatVersionTag(NATIVE_APP_VERSION)}`
-        : `Active build: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel})`;
+        ? `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel}) • Base Android app: ${formatVersionTag(NATIVE_APP_VERSION)}`
+        : `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel})`;
   }
 
-  // 1. Native App (APK) Row
+  // 1. Android App (Full Install) Row
   const nativeBadge = $("manual-native-badge");
   const nativeMeta = $("manual-native-meta");
   const nativeBtn = $("manual-native-btn");
 
   if (info.hasNativeUpdate) {
     if (nativeBadge) {
-      nativeBadge.textContent = "New APK";
+      nativeBadge.textContent = "Update Available";
       nativeBadge.className = "channel-badge stable";
     }
     if (nativeMeta) {
-      nativeMeta.textContent = `Installed APK: ${formatVersionTag(NATIVE_APP_VERSION)} → ${formatVersionTag(info.latestTag)}${
+      nativeMeta.textContent = `${formatVersionTag(NATIVE_APP_VERSION)} → ${formatVersionTag(info.latestTag)}${
         info.apkAsset ? " • " + formatAssetMeta(info.apkAsset) : ""
       }`;
     }
@@ -2224,14 +2232,14 @@ function showManualUpdateModal(info) {
       nativeBadge.className = "channel-badge installed";
     }
     if (nativeMeta) {
-      nativeMeta.textContent = `Installed APK: ${formatVersionTag(NATIVE_APP_VERSION)} (Latest release)`;
+      nativeMeta.textContent = `Installed: ${formatVersionTag(NATIVE_APP_VERSION)} (Latest release)`;
     }
     if (nativeBtn) {
       nativeBtn.classList.add("hidden");
     }
   }
 
-  // 2. Stable OTA Package (dist.zip) Row
+  // 2. Stable Update (In-App Package) Row
   const stableBadge = $("manual-stable-badge");
   const stableMeta = $("manual-stable-meta");
   const stableBtn = $("manual-stable-btn");
@@ -2241,7 +2249,7 @@ function showManualUpdateModal(info) {
       stableBadge.textContent = "Unavailable";
       stableBadge.className = "channel-badge native";
     }
-    if (stableMeta) stableMeta.textContent = "No stable dist.zip found on latest release";
+    if (stableMeta) stableMeta.textContent = "No stable update package available";
     if (stableBtn) {
       stableBtn.disabled = true;
       stableBtn.className = "btn-ghost update-channel-btn";
@@ -2249,10 +2257,10 @@ function showManualUpdateModal(info) {
     }
   } else if (!info.isCompatibleForOta) {
     if (stableBadge) {
-      stableBadge.textContent = "Requires APK";
+      stableBadge.textContent = "Requires App Update";
       stableBadge.className = "channel-badge native";
     }
-    if (stableMeta) stableMeta.textContent = `Requires native app ${formatVersionTag(info.latestTag)}`;
+    if (stableMeta) stableMeta.textContent = `Requires Android App ${formatVersionTag(info.latestTag)}`;
     if (stableBtn) {
       stableBtn.disabled = true;
       stableBtn.className = "btn-ghost update-channel-btn";
@@ -2263,7 +2271,7 @@ function showManualUpdateModal(info) {
       stableBadge.textContent = info.isStableInstalled ? "Installed" : "Up to date";
       stableBadge.className = "channel-badge installed";
     }
-    if (stableMeta) stableMeta.textContent = `dist.zip • ${formatAssetMeta(info.stableAsset)}`;
+    if (stableMeta) stableMeta.textContent = formatAssetMeta(info.stableAsset);
     if (stableBtn) {
       stableBtn.disabled = false;
       stableBtn.className = "btn-ghost update-channel-btn";
@@ -2275,10 +2283,10 @@ function showManualUpdateModal(info) {
     }
   } else {
     if (stableBadge) {
-      stableBadge.textContent = info.hasStableOtaUpdate ? "Update Ready" : "Stable OTA";
+      stableBadge.textContent = info.hasStableOtaUpdate ? "Update Ready" : "Available";
       stableBadge.className = "channel-badge stable";
     }
-    if (stableMeta) stableMeta.textContent = `dist.zip • ${formatAssetMeta(info.stableAsset)}`;
+    if (stableMeta) stableMeta.textContent = formatAssetMeta(info.stableAsset);
     if (stableBtn) {
       stableBtn.disabled = false;
       stableBtn.className = "btn-primary update-channel-btn";
@@ -2290,7 +2298,7 @@ function showManualUpdateModal(info) {
     }
   }
 
-  // 3. Unstable / Testing OTA Package (dist-unstable.zip) Row
+  // 3. Testing Build (In-App Preview Package) Row
   const unstableBadge = $("manual-unstable-badge");
   const unstableMeta = $("manual-unstable-meta");
   const unstableBtn = $("manual-unstable-btn");
@@ -2300,7 +2308,7 @@ function showManualUpdateModal(info) {
       unstableBadge.textContent = "No Build";
       unstableBadge.className = "channel-badge native";
     }
-    if (unstableMeta) unstableMeta.textContent = "No dist-unstable.zip attached to release";
+    if (unstableMeta) unstableMeta.textContent = "No testing build available for this release";
     if (unstableBtn) {
       unstableBtn.disabled = true;
       unstableBtn.className = "btn-ghost update-channel-btn unstable-btn";
@@ -2308,10 +2316,10 @@ function showManualUpdateModal(info) {
     }
   } else if (!info.isCompatibleForOta) {
     if (unstableBadge) {
-      unstableBadge.textContent = "Requires APK";
+      unstableBadge.textContent = "Requires App Update";
       unstableBadge.className = "channel-badge native";
     }
-    if (unstableMeta) unstableMeta.textContent = `Requires native app ${formatVersionTag(info.latestTag)}`;
+    if (unstableMeta) unstableMeta.textContent = `Requires Android App ${formatVersionTag(info.latestTag)}`;
     if (unstableBtn) {
       unstableBtn.disabled = true;
       unstableBtn.className = "btn-ghost update-channel-btn unstable-btn";
@@ -2322,7 +2330,7 @@ function showManualUpdateModal(info) {
       unstableBadge.textContent = "Active";
       unstableBadge.className = "channel-badge unstable";
     }
-    if (unstableMeta) unstableMeta.textContent = `dist-unstable.zip • ${formatAssetMeta(info.unstableAsset)}`;
+    if (unstableMeta) unstableMeta.textContent = formatAssetMeta(info.unstableAsset);
     if (unstableBtn) {
       unstableBtn.disabled = false;
       unstableBtn.className = "btn-ghost update-channel-btn unstable-btn";
@@ -2334,10 +2342,10 @@ function showManualUpdateModal(info) {
     }
   } else {
     if (unstableBadge) {
-      unstableBadge.textContent = "Testing / Debug";
+      unstableBadge.textContent = "Preview";
       unstableBadge.className = "channel-badge unstable";
     }
-    if (unstableMeta) unstableMeta.textContent = `dist-unstable.zip • ${formatAssetMeta(info.unstableAsset)}`;
+    if (unstableMeta) unstableMeta.textContent = formatAssetMeta(info.unstableAsset);
     if (unstableBtn) {
       unstableBtn.disabled = false;
       unstableBtn.className = "btn-ghost update-channel-btn unstable-btn";
@@ -2349,11 +2357,11 @@ function showManualUpdateModal(info) {
     }
   }
 
-  // 4. Revert to Built-in Native Package Button
+  // 4. Reset to Original App Version Button
   const revertBtn = $("manual-revert-native-btn");
   if (revertBtn) {
     revertBtn.classList.toggle("hidden", !info.hasInstalledBundle);
-    revertBtn.textContent = `Revert to Built-in Native Package (${formatVersionTag(NATIVE_APP_VERSION)})`;
+    revertBtn.textContent = `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
     revertBtn.onclick = () => {
       try {
         localStorage.removeItem("budgelist-bundle-app-js");
@@ -2365,7 +2373,7 @@ function showManualUpdateModal(info) {
         localStorage.removeItem("budgelist-installed-bundle-time");
       } catch (e) {}
       closeUpdateModal();
-      showToast("Reverting to built-in native package...");
+      showToast("Resetting to original app version...");
       setTimeout(() => {
         window.location.reload();
       }, 350);
@@ -2629,7 +2637,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   if (isOtaUpdating || !zipAsset || !zipAsset.browser_download_url) return false;
 
   if (!isSameOrNewerVersion(latestTag, NATIVE_APP_VERSION)) {
-    showToast(`Package requires native app ${formatVersionTag(latestTag)}`);
+    showToast(`Update requires Android App ${formatVersionTag(latestTag)}`);
     return false;
   }
 
@@ -2643,7 +2651,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
     bundleKey ||
     `${latestTag}_${channel}_${zipAsset.updated_at || zipAsset.id || zipAsset.size}`;
   const originScreen = isGuest || uid ? "app" : "auth";
-  const channelLabel = channel === "unstable" ? "Unstable OTA" : "Stable OTA";
+  const channelLabel = channel === "unstable" ? "Testing Build" : "Stable Update";
 
   isOtaUpdating = true;
   console.log(`[OTA] Starting ${channelLabel} bundle download: ${resolvedKey}`);
@@ -2662,7 +2670,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   if (progressBar) progressBar.style.width = "5%";
   if (statusDetail) {
     statusDetail.classList.remove("hidden");
-    statusDetail.textContent = `Connecting to GitHub (${zipAsset.name})...`;
+    statusDetail.textContent = "Connecting to update server...";
   }
 
   let skipped = false;
@@ -2681,7 +2689,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   }
 
   try {
-    if (statusDetail) statusDetail.textContent = `Downloading ${zipAsset.name}...`;
+    if (statusDetail) statusDetail.textContent = `Downloading ${channelLabel.toLowerCase()}...`;
     const res = await nativeFetch(zipAsset.browser_download_url, {
       signal: otaCancelController.signal,
       isBlob: true,
@@ -2718,8 +2726,8 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
 
     if (skipped) throw new Error("Update cancelled by user.");
 
-    if (statusText) statusText.textContent = "Extracting package...";
-    if (statusDetail) statusDetail.textContent = `Unpacking ${zipAsset.name}...`;
+    if (statusText) statusText.textContent = "Applying update...";
+    if (statusDetail) statusDetail.textContent = "Unpacking update files...";
     if (progressBar) progressBar.style.width = "90%";
 
     const zip = await JSZip.loadAsync(blob);
