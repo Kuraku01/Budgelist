@@ -90,6 +90,10 @@ const budgetBtn = $("set-budget-btn"), budgetSheet = $("budget-sheet"), budgetFo
 const recurringSheet = $("recurring-sheet"), recurringForm = $("recurring-form");
 let categorySort = safeGet("budgelist-cat-sort") || "default";
 let categoryChartType = safeGet("budgelist-cat-chart") || "pie";
+let expenseViewMode = safeGet("budgelist-expense-view") || "grouped";
+let recurringViewMode = safeGet("budgelist-recurring-view") || "list";
+let expenseCategoryFilter = "ALL";
+const collapsedExpenseDays = new Set();
 
 // ---------- State ----------
 let uid = null;
@@ -114,10 +118,30 @@ let pendingUnlockYm = null;
 let sliderAnimFrame = null;
 
 const dayLabelFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+const shortDateFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+const groupDayFmt = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 
 const CATEGORIES = ["Food", "Transport", "Bills", "Shopping", "Health", "Other"];
 const CAT_VAR = { Food: "--cat-food", Transport: "--cat-transport", Bills: "--cat-bills",
   Shopping: "--cat-shopping", Health: "--cat-health", Other: "--cat-other" };
+
+function catIconSvg(cat, size = 16) {
+  const attrs = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"`;
+  switch (cat) {
+    case "Food":
+      return `<svg ${attrs}><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></svg>`;
+    case "Transport":
+      return `<svg ${attrs}><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9L18 10l-2-4H8L6 10l-2.5 1.1C2.7 11.3 2 12.1 2 13v3c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>`;
+    case "Bills":
+      return `<svg ${attrs}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+    case "Shopping":
+      return `<svg ${attrs}><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`;
+    case "Health":
+      return `<svg ${attrs}><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>`;
+    default:
+      return `<svg ${attrs}><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>`;
+  }
+}
 
 function toLocalISO(d) {
   const y = d.getFullYear();
@@ -2048,11 +2072,26 @@ function inspectReleaseAssets(release) {
 
 const updateModal = $("update-modal");
 const closeUpdateModalBtn = $("close-update-modal-btn");
+const refreshUpdateModalBtn = $("refresh-update-modal-btn");
 const manualCloseBtn = $("manual-close-btn");
 const cancelUpdateBtn = $("cancel-update-btn");
 const downloadUpdateBtn = $("download-update-btn");
 
+let manualUpdateCheckController = null;
+let manualUpdateCheckSeq = 0;
+
 function closeUpdateModal() {
+  if (manualUpdateCheckController) {
+    manualUpdateCheckSeq++;
+    try {
+      manualUpdateCheckController.abort();
+    } catch (e) {}
+    manualUpdateCheckController = null;
+  }
+  if (refreshUpdateModalBtn) refreshUpdateModalBtn.classList.remove("spinning");
+  const checkingBanner = $("update-checking-banner");
+  if (checkingBanner) checkingBanner.classList.add("hidden");
+  if (manualCloseBtn) manualCloseBtn.textContent = "Close";
   if (updateModal) updateModal.classList.add("hidden");
 }
 
@@ -2061,6 +2100,11 @@ if (closeUpdateModalBtn) {
 }
 if (manualCloseBtn) {
   manualCloseBtn.addEventListener("click", closeUpdateModal);
+}
+if (refreshUpdateModalBtn) {
+  refreshUpdateModalBtn.addEventListener("click", () => {
+    checkForAppUpdates(false, false);
+  });
 }
 
 if (cancelUpdateBtn) {
@@ -2114,6 +2158,8 @@ function showStartupUpdateModal(options) {
   if (startupView) startupView.classList.remove("hidden");
   if (manualView) manualView.classList.add("hidden");
   if (closeUpdateModalBtn) closeUpdateModalBtn.classList.add("hidden");
+  if (refreshUpdateModalBtn) refreshUpdateModalBtn.classList.add("hidden");
+  if ($("update-checking-banner")) $("update-checking-banner").classList.add("hidden");
 
   if (options.type === "stable-ota") {
     const installedChannel = safeGet("budgelist-installed-bundle-channel");
@@ -2187,7 +2233,12 @@ function showManualUpdateModal(info) {
 
   if (startupView) startupView.classList.add("hidden");
   if (manualView) manualView.classList.remove("hidden");
+  if ($("update-checking-banner")) $("update-checking-banner").classList.add("hidden");
   if (closeUpdateModalBtn) closeUpdateModalBtn.classList.remove("hidden");
+  if (refreshUpdateModalBtn) {
+    refreshUpdateModalBtn.classList.remove("hidden", "spinning");
+  }
+  if (manualCloseBtn) manualCloseBtn.textContent = "Close";
 
   const activeChannelLabel = info.hasInstalledBundle
     ? info.installedChannel === "unstable"
@@ -2358,32 +2409,214 @@ function showManualUpdateModal(info) {
   }
 
   // 4. Reset to Original App Version Button
-  const revertBtn = $("manual-revert-native-btn");
-  if (revertBtn) {
-    revertBtn.classList.toggle("hidden", !info.hasInstalledBundle);
-    revertBtn.textContent = `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
-    revertBtn.onclick = () => {
-      try {
-        localStorage.removeItem("budgelist-bundle-app-js");
-        localStorage.removeItem("budgelist-bundle-style-css");
-        localStorage.removeItem("budgelist-bundle-body-html");
-        localStorage.removeItem("budgelist-installed-bundle-key");
-        localStorage.removeItem("budgelist-installed-bundle-tag");
-        localStorage.removeItem("budgelist-installed-bundle-channel");
-        localStorage.removeItem("budgelist-installed-bundle-time");
-      } catch (e) {}
-      closeUpdateModal();
-      showToast("Resetting to original app version...");
-      setTimeout(() => {
-        window.location.reload();
-      }, 350);
-    };
-  }
+  bindRevertNativeButton(info.hasInstalledBundle);
 
   if (updateModal) updateModal.classList.remove("hidden");
 }
 
+function getLocalBundleSummary() {
+  const installedBundleKey = safeGet("budgelist-installed-bundle-key") || "";
+  const hasBundleJs = Boolean(safeGet("budgelist-bundle-app-js"));
+  const hasNativeBridgeSig = Boolean(
+    window.AndroidBridge && typeof window.AndroidBridge.getNativeBuildSignature === "function"
+  );
+  const hasInstalledBundle = Boolean(
+    (installedBundleKey && hasBundleJs) || (hasBundleJs && !hasNativeBridgeSig)
+  );
+  const installedChannel = hasInstalledBundle
+    ? safeGet("budgelist-installed-bundle-channel") || "stable"
+    : "native";
+  const activeChannelLabel = hasInstalledBundle
+    ? installedChannel === "unstable"
+      ? "Testing Build"
+      : "Live Update"
+    : "Built-in";
+  return { hasInstalledBundle, installedChannel, activeChannelLabel };
+}
+
+function bindRevertNativeButton(hasInstalledBundle) {
+  const revertBtn = $("manual-revert-native-btn");
+  if (!revertBtn) return;
+  revertBtn.classList.toggle("hidden", !hasInstalledBundle);
+  revertBtn.textContent = `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
+  revertBtn.onclick = () => {
+    try {
+      localStorage.removeItem("budgelist-bundle-app-js");
+      localStorage.removeItem("budgelist-bundle-style-css");
+      localStorage.removeItem("budgelist-bundle-body-html");
+      localStorage.removeItem("budgelist-installed-bundle-key");
+      localStorage.removeItem("budgelist-installed-bundle-tag");
+      localStorage.removeItem("budgelist-installed-bundle-channel");
+      localStorage.removeItem("budgelist-installed-bundle-time");
+    } catch (e) {}
+    closeUpdateModal();
+    showToast("Resetting to original app version...");
+    setTimeout(() => {
+      window.location.reload();
+    }, 350);
+  };
+}
+
+function showManualUpdateCheckingState(isOffline = false) {
+  const startupView = $("update-startup-view");
+  const manualView = $("update-manual-view");
+  const modalTitle = $("update-modal-title");
+  const modalMsg = $("update-modal-msg");
+  const checkingBanner = $("update-checking-banner");
+  const checkingText = $("update-checking-text");
+
+  if (startupView) startupView.classList.add("hidden");
+  if (manualView) manualView.classList.remove("hidden");
+  if (closeUpdateModalBtn) closeUpdateModalBtn.classList.remove("hidden");
+  if (refreshUpdateModalBtn) {
+    refreshUpdateModalBtn.classList.remove("hidden");
+    refreshUpdateModalBtn.classList.toggle("spinning", !isOffline);
+  }
+  if (manualCloseBtn) {
+    manualCloseBtn.textContent = isOffline ? "Close" : "Cancel Check";
+  }
+
+  const { hasInstalledBundle, activeChannelLabel } = getLocalBundleSummary();
+  if (modalTitle) modalTitle.textContent = "Update Center";
+  if (modalMsg) {
+    modalMsg.textContent =
+      NATIVE_APP_VERSION !== APP_VERSION
+        ? `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel}) • Base Android app: ${formatVersionTag(NATIVE_APP_VERSION)}`
+        : `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel})`;
+  }
+
+  if (checkingBanner && checkingText) {
+    checkingBanner.classList.remove("hidden");
+    checkingBanner.classList.toggle("error", isOffline);
+    checkingText.textContent = isOffline
+      ? "No internet connection — connect and tap ↻ to check for updates."
+      : "Checking update server...";
+  }
+
+  const nativeBadge = $("manual-native-badge");
+  const nativeMeta = $("manual-native-meta");
+  const nativeBtn = $("manual-native-btn");
+  if (nativeBadge) {
+    nativeBadge.textContent = isOffline ? "Offline" : "Checking...";
+    nativeBadge.className = isOffline ? "channel-badge native" : "channel-badge checking";
+  }
+  if (nativeMeta) {
+    nativeMeta.textContent = `Installed: ${formatVersionTag(NATIVE_APP_VERSION)}`;
+  }
+  if (nativeBtn) nativeBtn.classList.add("hidden");
+
+  const stableBadge = $("manual-stable-badge");
+  const stableMeta = $("manual-stable-meta");
+  const stableBtn = $("manual-stable-btn");
+  if (stableBadge) {
+    stableBadge.textContent = isOffline ? "Offline" : "Checking...";
+    stableBadge.className = isOffline ? "channel-badge native" : "channel-badge checking";
+  }
+  if (stableMeta) {
+    stableMeta.textContent = isOffline
+      ? "Connect to the internet to check stable updates"
+      : "Fetching latest stable update info...";
+  }
+  if (stableBtn) {
+    stableBtn.disabled = true;
+    stableBtn.className = "btn-ghost update-channel-btn";
+    stableBtn.textContent = isOffline ? "Offline" : "Wait...";
+  }
+
+  const unstableBadge = $("manual-unstable-badge");
+  const unstableMeta = $("manual-unstable-meta");
+  const unstableBtn = $("manual-unstable-btn");
+  if (unstableBadge) {
+    unstableBadge.textContent = isOffline ? "Offline" : "Checking...";
+    unstableBadge.className = isOffline ? "channel-badge native" : "channel-badge checking";
+  }
+  if (unstableMeta) {
+    unstableMeta.textContent = isOffline
+      ? "Connect to the internet to check preview builds"
+      : "Fetching latest preview build info...";
+  }
+  if (unstableBtn) {
+    unstableBtn.disabled = true;
+    unstableBtn.className = "btn-ghost update-channel-btn unstable-btn";
+    unstableBtn.textContent = isOffline ? "Offline" : "Wait...";
+  }
+
+  bindRevertNativeButton(hasInstalledBundle);
+  if (updateModal) updateModal.classList.remove("hidden");
+}
+
+function raceWithSignalAndTimeout(promise, signal, timeoutMs = 0) {
+  if (!signal && (!timeoutMs || timeoutMs <= 0)) return promise;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer = null;
+
+    const cleanup = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      if (signal) {
+        signal.removeEventListener("abort", onAbort);
+      }
+    };
+
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      const err = new Error("Request aborted");
+      err.name = "AbortError";
+      reject(err);
+    };
+
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    if (timeoutMs && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        const err = new Error("Request timed out");
+        err.name = "TimeoutError";
+        reject(err);
+      }, timeoutMs);
+    }
+
+    promise.then(
+      (val) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(val);
+      },
+      (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(err);
+      }
+    );
+  });
+}
+
 async function nativeFetch(url, options = {}) {
+  const signal = options.signal || null;
+  const timeoutMs = options.timeoutMs || 0;
+
+  if (signal && signal.aborted) {
+    const abortErr = new Error("Request aborted");
+    abortErr.name = "AbortError";
+    throw abortErr;
+  }
+
   const capPlugins = window.Capacitor && window.Capacitor.Plugins;
   const capHttp = (capPlugins && capPlugins.CapacitorHttp) || (window.Capacitor && window.Capacitor.Http) || window.CapacitorHttp;
 
@@ -2391,12 +2624,16 @@ async function nativeFetch(url, options = {}) {
     try {
       const isArrayBuffer = options.responseType === "arraybuffer" || options.isBlob;
       const fn = typeof capHttp.get === "function" ? capHttp.get.bind(capHttp) : capHttp.request.bind(capHttp);
-      const res = await fn({
+      const reqPromise = fn({
         method: options.method || "GET",
         url: url,
         headers: options.headers || {},
-        responseType: isArrayBuffer ? "arraybuffer" : "text"
+        responseType: isArrayBuffer ? "arraybuffer" : "text",
+        connectTimeout: timeoutMs > 0 ? timeoutMs : 12000,
+        readTimeout: timeoutMs > 0 ? timeoutMs : 25000,
       });
+
+      const res = await raceWithSignalAndTimeout(reqPromise, signal, timeoutMs);
 
       if (res && typeof res.status === "number") {
         const isOk = res.status >= 200 && res.status < 300;
@@ -2426,11 +2663,14 @@ async function nativeFetch(url, options = {}) {
         };
       }
     } catch (e) {
+      if (e && (e.name === "AbortError" || (signal && signal.aborted))) {
+        throw e;
+      }
       console.warn("[OTA] CapacitorHttp request failed, falling back to fetch:", e);
     }
   }
 
-  return fetch(url, options);
+  return raceWithSignalAndTimeout(fetch(url, options), signal, timeoutMs);
 }
 
 const STARTUP_UPDATE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
@@ -2447,10 +2687,37 @@ function parseSizeTextToBytes(text) {
   return Math.round(val);
 }
 
-async function fetchReleaseViaCdnAndWeb() {
-  let latestTag = `v${APP_VERSION.replace(/^v/i, "")}`;
+async function fetchManifestForTag(tag, signal) {
+  const manifestUrl = `https://github.com/${GITHUB_REPO}/releases/download/${encodeURIComponent(tag)}/ota-manifest.json?_t=${Date.now()}`;
+  const manifestRes = await nativeFetch(manifestUrl, { signal, timeoutMs: 8000 });
+  if (manifestRes && manifestRes.ok) {
+    const manifest = await manifestRes.json();
+    if (manifest && manifest.tag_name && Array.isArray(manifest.assets)) {
+      return manifest;
+    }
+  }
+  return null;
+}
+
+async function fetchReleaseViaCdnAndWeb(signal = null) {
+  let guessedTag = `v${APP_VERSION.replace(/^v/i, "")}`;
   try {
-    const atomRes = await nativeFetch(`https://github.com/${GITHUB_REPO}/releases.atom?_t=${Date.now()}`);
+    const cachedRaw = safeGet("budgelist-cached-release-json");
+    if (cachedRaw) {
+      const parsed = JSON.parse(cachedRaw);
+      if (parsed && parsed.tag_name) guessedTag = parsed.tag_name.trim();
+    }
+  } catch (e) {}
+
+  // Speculatively start ota-manifest.json fetch in parallel with releases.atom to halve mobile RTT latency
+  const speculativeManifestPromise = fetchManifestForTag(guessedTag, signal).catch(() => null);
+
+  let latestTag = guessedTag;
+  try {
+    const atomRes = await nativeFetch(`https://github.com/${GITHUB_REPO}/releases.atom?_t=${Date.now()}`, {
+      signal,
+      timeoutMs: 6500,
+    });
     if (atomRes && atomRes.ok) {
       const atomXml = await atomRes.text();
       const tagMatch = atomXml.match(/\/releases\/tag\/([^"'<>?\s]+)/i);
@@ -2459,27 +2726,34 @@ async function fetchReleaseViaCdnAndWeb() {
       }
     }
   } catch (e) {
+    if (e && (e.name === "AbortError" || (signal && signal.aborted))) throw e;
     console.warn("[OTA] Atom feed fetch failed:", e);
   }
 
-  // 1. Primary: Fetch CDN-hosted ota-manifest.json (pure JSON, zero API rate limit)
+  if (signal && signal.aborted) {
+    const abortErr = new Error("Request aborted");
+    abortErr.name = "AbortError";
+    throw abortErr;
+  }
+
+  // 1. Primary: Use speculative manifest if tag matches, otherwise fetch manifest for new latestTag
   try {
-    const manifestUrl = `https://github.com/${GITHUB_REPO}/releases/download/${encodeURIComponent(latestTag)}/ota-manifest.json?_t=${Date.now()}`;
-    const manifestRes = await nativeFetch(manifestUrl);
-    if (manifestRes && manifestRes.ok) {
-      const manifest = await manifestRes.json();
-      if (manifest && manifest.tag_name && Array.isArray(manifest.assets)) {
-        safeSet("budgelist-cached-release-json", JSON.stringify(manifest));
-        return manifest;
-      }
+    const manifest =
+      latestTag === guessedTag
+        ? await speculativeManifestPromise
+        : await fetchManifestForTag(latestTag, signal);
+    if (manifest) {
+      safeSet("budgelist-cached-release-json", JSON.stringify(manifest));
+      return manifest;
     }
   } catch (e) {
+    if (e && (e.name === "AbortError" || (signal && signal.aborted))) throw e;
     console.warn("[OTA] CDN ota-manifest.json not available, trying expanded_assets:", e);
   }
 
   // 2. Secondary: Parse GitHub expanded_assets HTML fragment (also zero API rate limit)
   const assetsUrl = `https://github.com/${GITHUB_REPO}/releases/expanded_assets/${encodeURIComponent(latestTag)}?_t=${Date.now()}`;
-  const assetsRes = await nativeFetch(assetsUrl);
+  const assetsRes = await nativeFetch(assetsUrl, { signal, timeoutMs: 8000 });
   if (!assetsRes || !assetsRes.ok) return null;
 
   const html = await assetsRes.text();
@@ -2517,7 +2791,10 @@ async function fetchReleaseViaCdnAndWeb() {
   return fallbackRelease;
 }
 
-async function fetchLatestRelease(isStartup = false) {
+async function fetchLatestRelease(isStartup = false, options = {}) {
+  const signal = options.signal || null;
+  const allowStaleFallback = options.allowStaleFallback !== false;
+
   // Use 10-minute cooldown cache for automatic startup checks to avoid redundant network traffic
   if (isStartup) {
     const lastCheckTs = Number(safeGet("budgelist-last-startup-check-ts") || 0);
@@ -2531,24 +2808,23 @@ async function fetchLatestRelease(isStartup = false) {
 
   // 1. Primary: Rate-limit-free GitHub CDN (ota-manifest.json / expanded_assets)
   try {
-    const cdnRelease = await fetchReleaseViaCdnAndWeb();
+    const cdnRelease = await fetchReleaseViaCdnAndWeb(signal);
     if (cdnRelease) {
       if (isStartup) safeSet("budgelist-last-startup-check-ts", String(Date.now()));
       return cdnRelease;
     }
   } catch (e) {
+    if (e && (e.name === "AbortError" || (signal && signal.aborted))) throw e;
     console.warn("[OTA] Primary CDN release check failed:", e);
   }
 
   // 2. Fallback: GitHub REST API (60 req/hr per IP)
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
     const res = await nativeFetch(`https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1&_t=${Date.now()}`, {
       headers: { Accept: "application/vnd.github.v3+json" },
-      signal: controller.signal,
+      signal,
+      timeoutMs: 6000,
     });
-    clearTimeout(timeoutId);
 
     if (res && res.ok) {
       const releases = await res.json();
@@ -2559,35 +2835,116 @@ async function fetchLatestRelease(isStartup = false) {
       }
     }
   } catch (e) {
+    if (e && (e.name === "AbortError" || (signal && signal.aborted))) throw e;
     console.warn("[OTA] GitHub REST API fallback failed:", e);
   }
 
   // 3. Final offline/rate-limit fallback: last known cached release metadata
-  try {
-    const cached = safeGet("budgelist-cached-release-json");
-    if (cached) return JSON.parse(cached);
-  } catch (e) {}
+  if (allowStaleFallback) {
+    try {
+      const cached = safeGet("budgelist-cached-release-json");
+      if (cached) return JSON.parse(cached);
+    } catch (e) {}
+  }
 
   return null;
 }
 
 async function checkForAppUpdates(isStartup = false, silent = false) {
-  if (!silent) showToast("Checking for updates...");
-  const online = await checkNetworkConnection();
-  if (!online) {
-    if (!silent) showToast(`Offline. You are on v${APP_VERSION}`);
+  if (!isStartup) {
+    // Manual Update Center: Open popup immediately (0ms) with live checking state & cancel support
+    if (manualUpdateCheckController) {
+      try {
+        manualUpdateCheckController.abort();
+      } catch (e) {}
+    }
+    const controller = new AbortController();
+    manualUpdateCheckController = controller;
+    const reqSeq = ++manualUpdateCheckSeq;
+
+    const strictlyOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+    if (strictlyOffline) {
+      showManualUpdateCheckingState(true);
+      return false;
+    }
+
+    showManualUpdateCheckingState(false);
+
+    const checkingBanner = $("update-checking-banner");
+    const checkingText = $("update-checking-text");
+    const slowTimer = setTimeout(() => {
+      if (reqSeq === manualUpdateCheckSeq && !controller.signal.aborted && checkingText) {
+        checkingText.textContent = "Slow network detected — still reaching update server...";
+      }
+    }, 3200);
+
+    try {
+      const latest = await fetchLatestRelease(false, {
+        signal: controller.signal,
+        allowStaleFallback: false,
+      });
+
+      clearTimeout(slowTimer);
+      if (reqSeq !== manualUpdateCheckSeq || controller.signal.aborted) return false;
+      manualUpdateCheckController = null;
+
+      if (latest) {
+        if (checkingBanner) checkingBanner.classList.add("hidden");
+        const info = inspectReleaseAssets(latest);
+        showManualUpdateModal(info);
+        return true;
+      }
+
+      // Live fetch failed on weak network — show cached info if available with a clear warning banner
+      if (refreshUpdateModalBtn) refreshUpdateModalBtn.classList.remove("spinning");
+      if (manualCloseBtn) manualCloseBtn.textContent = "Close";
+
+      let cachedRelease = null;
+      try {
+        const raw = safeGet("budgelist-cached-release-json");
+        if (raw) cachedRelease = JSON.parse(raw);
+      } catch (e) {}
+
+      if (cachedRelease) {
+        showManualUpdateModal(inspectReleaseAssets(cachedRelease));
+        if (checkingBanner && checkingText) {
+          checkingBanner.classList.remove("hidden");
+          checkingBanner.classList.add("error");
+          checkingText.textContent = "Slow or unstable connection — showing last cached info. Tap ↻ to retry.";
+        }
+      } else {
+        showManualUpdateCheckingState(true);
+        if (checkingBanner && checkingText) {
+          checkingBanner.classList.remove("hidden");
+          checkingBanner.classList.add("error");
+          checkingText.textContent = "Could not reach update server on current network. Tap ↻ to retry.";
+        }
+      }
+      return false;
+    } catch (e) {
+      clearTimeout(slowTimer);
+      if (reqSeq !== manualUpdateCheckSeq || controller.signal.aborted) return false;
+      manualUpdateCheckController = null;
+      if (refreshUpdateModalBtn) refreshUpdateModalBtn.classList.remove("spinning");
+      if (manualCloseBtn) manualCloseBtn.textContent = "Close";
+      if (checkingBanner && checkingText) {
+        checkingBanner.classList.remove("hidden");
+        checkingBanner.classList.add("error");
+        checkingText.textContent = "Connection timed out. Check your mobile signal and tap ↻ to retry.";
+      }
+      return false;
+    }
+  }
+
+  // Startup Background Check
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return false;
   }
 
   try {
-    const latest = await fetchLatestRelease(isStartup);
+    const latest = await fetchLatestRelease(true);
     if (latest) {
       const info = inspectReleaseAssets(latest);
-
-      if (!isStartup) {
-        showManualUpdateModal(info);
-        return true;
-      }
 
       // Startup Mode: Never auto-download. Check Native APK first, then Stable OTA (ignore Unstable OTA).
       if (info.hasNativeUpdate) {
@@ -2622,7 +2979,6 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
 
       return false;
     }
-    if (!silent) showToast(`Could not fetch release info (v${APP_VERSION})`);
   } catch (e) {
     if (!silent) showToast(`Could not check updates (v${APP_VERSION})`);
   }
@@ -2631,7 +2987,10 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
 
 // ---------- GitHub Release ZIP OTA Live Updates Engine ----------
 let isOtaUpdating = false;
+let isOtaExtracting = false;
 let otaCancelController = null;
+let otaUpdateRunSeq = 0;
+let activeOtaCancelFn = null;
 
 async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable", bundleKey = "") {
   if (isOtaUpdating || !zipAsset || !zipAsset.browser_download_url) return false;
@@ -2652,8 +3011,10 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
     `${latestTag}_${channel}_${zipAsset.updated_at || zipAsset.id || zipAsset.size}`;
   const originScreen = isGuest || uid ? "app" : "auth";
   const channelLabel = channel === "unstable" ? "Testing Build" : "Stable Update";
+  const runId = ++otaUpdateRunSeq;
 
   isOtaUpdating = true;
+  isOtaExtracting = false;
   console.log(`[OTA] Starting ${channelLabel} bundle download: ${resolvedKey}`);
 
   const statusText = $("loading-status-text");
@@ -2667,33 +3028,83 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   showScreen("loading");
   if (statusText) statusText.textContent = `Installing ${channelLabel} (${formatVersionTag(latestTag)})...`;
   if (progressWrap) progressWrap.classList.remove("hidden");
-  if (progressBar) progressBar.style.width = "5%";
+  if (progressBar) progressBar.style.width = "8%";
   if (statusDetail) {
     statusDetail.classList.remove("hidden");
     statusDetail.textContent = "Connecting to update server...";
   }
+  if (skipBtn) {
+    skipBtn.textContent = "Cancel Update";
+    skipBtn.classList.remove("hidden");
+  }
 
   let skipped = false;
+  let progressTicker = null;
   otaCancelController = new AbortController();
 
-  let skipTimer = setTimeout(() => {
-    if (skipBtn) skipBtn.classList.remove("hidden");
-  }, 3000);
+  const cleanupUiState = () => {
+    if (progressTicker) {
+      clearInterval(progressTicker);
+      progressTicker = null;
+    }
+    if (progressWrap) progressWrap.classList.add("hidden");
+    if (statusDetail) statusDetail.classList.add("hidden");
+    if (skipBtn) skipBtn.classList.add("hidden");
+    if (statusText) statusText.textContent = "Loading session...";
+  };
 
+  const cancelDownloadImmediately = () => {
+    if (skipped || isOtaExtracting) return;
+    console.log("[OTA] User cancelled update immediately.");
+    skipped = true;
+    otaUpdateRunSeq++;
+    activeOtaCancelFn = null;
+    if (otaCancelController) {
+      try {
+        otaCancelController.abort();
+      } catch (e) {}
+    }
+    cleanupUiState();
+    isOtaUpdating = false;
+    isOtaExtracting = false;
+    showScreen(originScreen);
+    showToast("Update cancelled");
+  };
+
+  activeOtaCancelFn = cancelDownloadImmediately;
   if (skipBtn) {
-    skipBtn.onclick = () => {
-      console.log("[OTA] User cancelled update.");
-      skipped = true;
-      if (otaCancelController) otaCancelController.abort();
-    };
+    skipBtn.onclick = cancelDownloadImmediately;
   }
 
   try {
-    if (statusDetail) statusDetail.textContent = `Downloading ${channelLabel.toLowerCase()}...`;
+    const sizeHint = formatAssetSize(zipAsset.size);
+    if (statusDetail) {
+      statusDetail.textContent = `Downloading ${channelLabel.toLowerCase()}${sizeHint ? ` (${sizeHint})` : ""}...`;
+    }
+
+    // Smooth visual progress feedback during buffered native downloads (e.g. mobile network via CapacitorHttp)
+    let simulatedPct = 8;
+    const downloadStartTs = Date.now();
+    progressTicker = setInterval(() => {
+      if (skipped || runId !== otaUpdateRunSeq) return;
+      simulatedPct = Math.min(76, simulatedPct + Math.max(1, (78 - simulatedPct) * 0.14));
+      if (progressBar) progressBar.style.width = `${Math.round(simulatedPct)}%`;
+      const elapsedSec = Math.floor((Date.now() - downloadStartTs) / 1000);
+      if (elapsedSec >= 4 && statusDetail) {
+        statusDetail.textContent = `Still downloading${sizeHint ? ` (${sizeHint})` : ""} — slow network (${elapsedSec}s)...`;
+      }
+    }, 400);
+
     const res = await nativeFetch(zipAsset.browser_download_url, {
       signal: otaCancelController.signal,
       isBlob: true,
+      timeoutMs: 45000,
     });
+    if (progressTicker) {
+      clearInterval(progressTicker);
+      progressTicker = null;
+    }
+    if (skipped || runId !== otaUpdateRunSeq) return false;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const contentLength = res.headers.get("content-length");
@@ -2706,7 +3117,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
       const chunks = [];
 
       while (true) {
-        if (skipped) throw new Error("Update cancelled by user.");
+        if (skipped || runId !== otaUpdateRunSeq) throw new Error("Update cancelled by user.");
         const { done, value } = await reader.read();
         if (done) break;
         chunks.push(value);
@@ -2721,14 +3132,17 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
       blob = new Blob(chunks);
     } else {
       blob = await res.blob();
-      if (progressBar) progressBar.style.width = "70%";
+      if (progressBar) progressBar.style.width = "82%";
     }
 
-    if (skipped) throw new Error("Update cancelled by user.");
+    if (skipped || runId !== otaUpdateRunSeq) return false;
 
+    isOtaExtracting = true;
+    activeOtaCancelFn = null;
+    if (skipBtn) skipBtn.classList.add("hidden");
     if (statusText) statusText.textContent = "Applying update...";
     if (statusDetail) statusDetail.textContent = "Unpacking update files...";
-    if (progressBar) progressBar.style.width = "90%";
+    if (progressBar) progressBar.style.width = "92%";
 
     const zip = await JSZip.loadAsync(blob);
     const updates = {};
@@ -2741,6 +3155,8 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
         updates[cleanName] = content;
       }
     }
+
+    if (skipped || runId !== otaUpdateRunSeq) return false;
 
     if (updates["index.html"]) {
       const match = updates["index.html"].match(/<body[^>]*>([\s\S]*)<\/body>/i);
@@ -2768,16 +3184,21 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
       return true;
     }
   } catch (err) {
+    if (skipped || runId !== otaUpdateRunSeq) return false;
     console.warn("[OTA] Live update process aborted or failed:", err.message || err);
-    showScreen(originScreen);
-    showToast(skipped ? "Update cancelled" : "Update failed — keeping current version");
-  } finally {
-    clearTimeout(skipTimer);
-    if (progressWrap) progressWrap.classList.add("hidden");
-    if (statusDetail) statusDetail.classList.add("hidden");
-    if (skipBtn) skipBtn.classList.add("hidden");
-    if (statusText) statusText.textContent = "Loading session...";
+    cleanupUiState();
     isOtaUpdating = false;
+    isOtaExtracting = false;
+    activeOtaCancelFn = null;
+    showScreen(originScreen);
+    showToast("Update failed — keeping current version");
+    return false;
+  } finally {
+    if (runId === otaUpdateRunSeq && !isOtaExtracting) {
+      cleanupUiState();
+      isOtaUpdating = false;
+      activeOtaCancelFn = null;
+    }
   }
   return false;
 }
@@ -3140,7 +3561,9 @@ if (loginForgotPasswordBtn) {
   });
 }
 
-function handleLogout() {
+function performLogout() {
+  const logoutModal = $("logout-modal");
+  if (logoutModal) logoutModal.classList.add("hidden");
   closeSettingsSheet();
   safeSet("budgelist-last-session", "");
   safeSet("budgelist-last-uid", "");
@@ -3153,7 +3576,45 @@ function handleLogout() {
   }
 }
 
-$("logout-btn").addEventListener("click", handleLogout);
+function openLogoutModal() {
+  const logoutModal = $("logout-modal");
+  if (!logoutModal) {
+    performLogout();
+    return;
+  }
+  const titleEl = $("logout-modal-title");
+  const msgEl = $("logout-modal-msg");
+  const confirmBtn = $("confirm-logout-btn");
+
+  if (isGuest) {
+    if (titleEl) titleEl.textContent = "Exit Guest Mode?";
+    if (msgEl) {
+      msgEl.textContent =
+        "Return to the login screen? Your guest expenses and budgets will remain saved on this device.";
+    }
+    if (confirmBtn) confirmBtn.textContent = "Exit Guest";
+  } else {
+    if (titleEl) titleEl.textContent = "Log out?";
+    const hasPendingSync = Array.isArray(syncQueue) && syncQueue.length > 0;
+    if (msgEl) {
+      msgEl.textContent = hasPendingSync
+        ? "You have unsynced changes saved locally. Are you sure you want to log out right now?"
+        : "Are you sure you want to log out of your account on this device?";
+    }
+    if (confirmBtn) confirmBtn.textContent = "Log out";
+  }
+  logoutModal.classList.remove("hidden");
+}
+
+$("logout-btn").addEventListener("click", openLogoutModal);
+if ($("cancel-logout-btn")) {
+  $("cancel-logout-btn").addEventListener("click", () => {
+    $("logout-modal").classList.add("hidden");
+  });
+}
+if ($("confirm-logout-btn")) {
+  $("confirm-logout-btn").addEventListener("click", performLogout);
+}
 
 function humanAuthError(code) {
   const map = {
@@ -4395,6 +4856,30 @@ function calendarBounds() {
   return { min: new Date(CAL_MIN_YEAR, 0, 1), max: new Date(maxYear, 11, 1) };
 }
 
+function dayBounds() {
+  const maxYear = new Date().getFullYear() + CAL_FUTURE_YEARS;
+  return { min: new Date(CAL_MIN_YEAR, 0, 1), max: new Date(maxYear, 11, 31) };
+}
+
+function getTargetDayForDelta(delta) {
+  const realNow = new Date();
+  let baseDate;
+  if (selectedDateISO) {
+    const [y, m, d] = selectedDateISO.split("-").map((n) => parseInt(n, 10));
+    baseDate = new Date(y, m - 1, d);
+  } else {
+    const isCurrentMonthView = toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow);
+    if (isCurrentMonthView) {
+      baseDate = new Date(realNow.getFullYear(), realNow.getMonth(), realNow.getDate());
+    } else if (delta > 0) {
+      baseDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), 0);
+    } else {
+      baseDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
+    }
+  }
+  return new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + delta);
+}
+
 function changeMonth(delta) {
   const next = new Date(viewDate.getFullYear(), viewDate.getMonth() + delta, 1);
   const { min, max } = calendarBounds();
@@ -4405,6 +4890,18 @@ function changeMonth(delta) {
   if (grid) grid.classList.add("animate-enter");
   render();
 }
+
+function changeDay(delta) {
+  const nextDate = getTargetDayForDelta(delta);
+  const { min, max } = dayBounds();
+  if (nextDate < min || nextDate > max) return;
+  viewDate = startOfMonth(nextDate);
+  selectedDateISO = toLocalISO(nextDate);
+  const grid = $("calendar-grid-days");
+  if (grid) grid.classList.add("animate-enter");
+  render();
+}
+
 $("prev-month").addEventListener("click", (e) => {
   e.stopPropagation();
   changeMonth(-1);
@@ -4413,6 +4910,18 @@ $("next-month").addEventListener("click", (e) => {
   e.stopPropagation();
   changeMonth(1);
 });
+if ($("prev-day")) {
+  $("prev-day").addEventListener("click", (e) => {
+    e.stopPropagation();
+    changeDay(-1);
+  });
+}
+if ($("next-day")) {
+  $("next-day").addEventListener("click", (e) => {
+    e.stopPropagation();
+    changeDay(1);
+  });
+}
 
 // Calendar controls
 const calDropdownBtn = $("calendar-dropdown-btn");
@@ -4428,8 +4937,13 @@ if (calResetBtn) {
   calResetBtn.addEventListener("click", (e) => {
     e.stopPropagation();
     const realNow = new Date();
-    viewDate = startOfMonth(realNow);
-    selectedDateISO = null;
+    const inCurrentMonth = toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow);
+    if (selectedDateISO && inCurrentMonth) {
+      selectedDateISO = null;
+    } else {
+      viewDate = startOfMonth(realNow);
+      selectedDateISO = null;
+    }
     const grid = $("calendar-grid-days");
     if (grid) grid.classList.add("animate-enter");
     render();
@@ -4608,25 +5122,44 @@ function render() {
   const monthLabelEl = $("month-label");
   const monthLabelBtn = $("calendar-dropdown-btn");
   const resetBtn = $("calendar-reset-btn");
+  const resetTextEl = $("calendar-reset-text");
+  const inCurrentMonth = toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow);
 
   if (selectedDateISO) {
     const [y, m, d] = selectedDateISO.split("-").map((n) => parseInt(n, 10));
     const selDate = new Date(y, m - 1, d);
     if (monthLabelEl) monthLabelEl.textContent = dayLabelFmt.format(selDate);
     if (monthLabelBtn) monthLabelBtn.classList.add("filtered");
-    if (resetBtn) resetBtn.classList.toggle("hidden", selectedDateISO === todayISO && toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow));
+    if (resetBtn) {
+      resetBtn.classList.remove("hidden");
+      resetBtn.title = inCurrentMonth ? "Show full month" : "Reset to current month";
+    }
+    if (resetTextEl) {
+      resetTextEl.textContent = inCurrentMonth ? "✕ Month" : "✕ Today";
+    }
   } else {
     if (monthLabelEl) monthLabelEl.textContent = monthLabelFmt.format(viewDate);
     if (monthLabelBtn) monthLabelBtn.classList.remove("filtered");
-    if (resetBtn) resetBtn.classList.toggle("hidden", toLocalMonthPrefix(viewDate) === toLocalMonthPrefix(realNow));
+    if (resetBtn) {
+      resetBtn.classList.toggle("hidden", inCurrentMonth);
+      resetBtn.title = "Reset to current month";
+    }
+    if (resetTextEl) {
+      resetTextEl.textContent = "✕ Today";
+    }
   }
 
   const { min: calMin, max: calMax } = calendarBounds();
   $("prev-month").disabled = viewDate <= calMin;
   $("next-month").disabled = viewDate >= calMax;
 
+  const { min: dMin, max: dMax } = dayBounds();
+  if ($("prev-day")) $("prev-day").disabled = getTargetDayForDelta(-1) < dMin;
+  if ($("next-day")) $("next-day").disabled = getTargetDayForDelta(1) > dMax;
+
   renderSummaryCard(monthTotal);
   renderCategories(monthExpenses);
+  renderRecurring();
   renderExpenseList(monthExpenses);
   renderForecast(allMonthExpenses, isCurrentMonth, daysInMonth, today);
   renderDayFilterBanner();
@@ -5019,97 +5552,661 @@ function svgBarChart(entries) {
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Spending by category, bar chart">${bars}</svg>`;
 }
 
+function syncViewModeToggles() {
+  document.querySelectorAll("[data-exp-view]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.expView === expenseViewMode);
+  });
+  document.querySelectorAll("[data-rec-view]").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.recView === recurringViewMode);
+  });
+}
+
+document.querySelectorAll("[data-exp-view]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.expView || "grouped";
+    expenseViewMode = mode;
+    safeSet("budgelist-expense-view", mode);
+    syncViewModeToggles();
+    const { monthExpenses } = currentMonthData();
+    renderExpenseList(monthExpenses);
+  });
+});
+
+document.querySelectorAll("[data-rec-view]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.recView || "list";
+    recurringViewMode = mode;
+    safeSet("budgelist-recurring-view", mode);
+    syncViewModeToggles();
+    renderRecurring();
+  });
+});
+
+syncViewModeToggles();
+
+function formatShortExpenseDate(dateISO) {
+  if (!dateISO) return "";
+  const [y, m, d] = dateISO.split("-").map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return dateISO.slice(5);
+  return shortDateFmt.format(new Date(y, m - 1, d));
+}
+
+function formatExpenseDayGroupLabel(dateISO) {
+  if (!dateISO) return "Unknown date";
+  const [y, m, d] = dateISO.split("-").map((n) => parseInt(n, 10));
+  if (!y || !m || !d) return dateISO;
+  const target = new Date(y, m - 1, d);
+  const now = new Date();
+  const todayStr = toLocalISO(now);
+  const yestDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  const yestStr = toLocalISO(yestDate);
+
+  if (dateISO === todayStr) return `Today · ${shortDateFmt.format(target)}`;
+  if (dateISO === yestStr) return `Yesterday · ${shortDateFmt.format(target)}`;
+  return groupDayFmt.format(target);
+}
+
+function renderExpenseCategoryFilterChips(monthExpenses) {
+  const filterWrap = $("expense-category-filter");
+  if (!filterWrap) return;
+
+  const counts = {};
+  monthExpenses.forEach((e) => {
+    const c = e.category || "Other";
+    counts[c] = (counts[c] || 0) + 1;
+  });
+
+  const activeCats = CATEGORIES.filter((c) => counts[c] > 0);
+  if (expenseCategoryFilter !== "ALL" && !counts[expenseCategoryFilter]) {
+    expenseCategoryFilter = "ALL";
+  }
+
+  if (monthExpenses.length === 0 || activeCats.length < 2) {
+    filterWrap.classList.add("hidden");
+    filterWrap.innerHTML = "";
+    return;
+  }
+
+  filterWrap.classList.remove("hidden");
+  filterWrap.innerHTML = "";
+  const frag = document.createDocumentFragment();
+
+  const allChip = document.createElement("button");
+  allChip.type = "button";
+  allChip.className = `cat-filter-chip${expenseCategoryFilter === "ALL" ? " active" : ""}`;
+  allChip.textContent = `All (${monthExpenses.length})`;
+  allChip.addEventListener("click", () => {
+    expenseCategoryFilter = "ALL";
+    renderExpenseList(monthExpenses);
+  });
+  frag.appendChild(allChip);
+
+  activeCats.forEach((cat) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `cat-filter-chip${expenseCategoryFilter === cat ? " active" : ""}`;
+    const dot = document.createElement("span");
+    dot.className = "cat-chip-dot";
+    dot.style.background = catColor(cat);
+    const label = document.createElement("span");
+    label.textContent = `${cat} (${counts[cat]})`;
+    chip.appendChild(dot);
+    chip.appendChild(label);
+    chip.addEventListener("click", () => {
+      expenseCategoryFilter = expenseCategoryFilter === cat ? "ALL" : cat;
+      renderExpenseList(monthExpenses);
+    });
+    frag.appendChild(chip);
+  });
+
+  filterWrap.appendChild(frag);
+}
+
 function renderExpenseList(monthExpenses) {
-  const sorted = [...monthExpenses].sort((a, b) => b.dateISO.localeCompare(a.dateISO) || b.createdAt - a.createdAt);
+  renderExpenseCategoryFilterChips(monthExpenses);
+
+  const countBadge = $("expense-count-badge");
+  if (countBadge) {
+    countBadge.textContent = String(monthExpenses.length);
+    countBadge.classList.toggle("hidden", monthExpenses.length === 0);
+  }
+
+  const filtered =
+    expenseCategoryFilter === "ALL"
+      ? monthExpenses
+      : monthExpenses.filter((e) => (e.category || "Other") === expenseCategoryFilter);
+
+  const sorted = [...filtered].sort(
+    (a, b) => (b.dateISO || "").localeCompare(a.dateISO || "") || (b.createdAt || 0) - (a.createdAt || 0)
+  );
+
   const container = $("expense-list");
-  $("empty-state").classList.toggle("hidden", sorted.length > 0);
+  const emptyEl = $("empty-state");
+  if (emptyEl) {
+    emptyEl.textContent =
+      selectedDateISO
+        ? "No expenses logged for this day."
+        : "Nothing logged for this month yet.";
+    emptyEl.classList.toggle("hidden", sorted.length > 0);
+  }
+
+  const effectiveMode =
+    expenseViewMode === "compact" || expenseViewMode === "grid" ? expenseViewMode : "grouped";
+  container.className = `expense-list view-${effectiveMode}`;
   container.innerHTML = "";
+
+  if (sorted.length === 0) return;
 
   const fragment = document.createDocumentFragment();
 
-  sorted.forEach((e) => {
-    const li = document.createElement("li");
-    li.dataset.id = e.id;
-
-    const mainDiv = document.createElement("div");
-    mainDiv.className = "expense-main";
-
-    const dot = document.createElement("span");
-    dot.className = "cat-dot-sm";
-    dot.style.background = catColor(e.category);
-
-    const textDiv = document.createElement("div");
-    textDiv.className = "expense-text";
-
-    const catSpan = document.createElement("span");
-    catSpan.className = "expense-cat";
-    catSpan.textContent = e.category + (e.recurringId ? " · recurring" : "");
-
-    textDiv.appendChild(catSpan);
-
-    if (e.note) {
-      const noteSpan = document.createElement("span");
-      noteSpan.className = "expense-note";
-      noteSpan.textContent = e.note;
-      textDiv.appendChild(noteSpan);
-    }
-
-    mainDiv.appendChild(dot);
-    mainDiv.appendChild(textDiv);
-
-    const sideDiv = document.createElement("div");
-
-    const dateSpan = document.createElement("span");
-    dateSpan.className = "expense-date";
-    dateSpan.textContent = e.dateISO ? e.dateISO.slice(5) : "";
-
-    const amountSpan = document.createElement("span");
-    amountSpan.className = "expense-amount";
-    amountSpan.textContent = fmt(e.amount);
-
-    sideDiv.appendChild(dateSpan);
-    sideDiv.appendChild(amountSpan);
-
-    li.appendChild(mainDiv);
-    li.appendChild(sideDiv);
-
-    li.addEventListener("click", () => {
-      const exp = expenses.find((x) => x.id === e.id);
-      if (exp) openExpenseSheet(exp);
+  if (effectiveMode === "grouped") {
+    const groups = [];
+    const groupMap = new Map();
+    sorted.forEach((e) => {
+      const key = e.dateISO || "unknown";
+      if (!groupMap.has(key)) {
+        const g = { dateISO: key, items: [], total: 0 };
+        groupMap.set(key, g);
+        groups.push(g);
+      }
+      const g = groupMap.get(key);
+      g.items.push(e);
+      g.total = round2(g.total + (Number(e.amount) || 0));
     });
 
-    fragment.appendChild(li);
-  });
+    groups.forEach((g) => {
+      const groupLi = document.createElement("li");
+      const isCollapsed = collapsedExpenseDays.has(g.dateISO);
+      groupLi.className = `expense-day-group${isCollapsed ? " collapsed" : ""}`;
+
+      const headerBtn = document.createElement("button");
+      headerBtn.type = "button";
+      headerBtn.className = "expense-day-header";
+
+      const titleWrap = document.createElement("div");
+      titleWrap.className = "expense-day-title-wrap";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "expense-day-title";
+      titleSpan.textContent = formatExpenseDayGroupLabel(g.dateISO);
+
+      const countSpan = document.createElement("span");
+      countSpan.className = "expense-day-count";
+      countSpan.textContent = `· ${g.items.length}`;
+
+      titleWrap.appendChild(titleSpan);
+      titleWrap.appendChild(countSpan);
+
+      const rightWrap = document.createElement("div");
+      rightWrap.className = "expense-day-right";
+
+      const totalSpan = document.createElement("span");
+      totalSpan.className = "expense-day-total";
+      totalSpan.textContent = fmt(g.total);
+
+      const chevSpan = document.createElement("span");
+      chevSpan.className = "day-group-chevron";
+      chevSpan.textContent = "▾";
+
+      rightWrap.appendChild(totalSpan);
+      rightWrap.appendChild(chevSpan);
+
+      headerBtn.appendChild(titleWrap);
+      headerBtn.appendChild(rightWrap);
+
+      headerBtn.addEventListener("click", () => {
+        if (collapsedExpenseDays.has(g.dateISO)) {
+          collapsedExpenseDays.delete(g.dateISO);
+          groupLi.classList.remove("collapsed");
+        } else {
+          collapsedExpenseDays.add(g.dateISO);
+          groupLi.classList.add("collapsed");
+        }
+      });
+
+      const itemsWrap = document.createElement("div");
+      itemsWrap.className = "expense-day-items";
+
+      g.items.forEach((e) => {
+        const row = document.createElement("div");
+        row.className = "expense-card-row";
+        const color = catColor(e.category);
+
+        const left = document.createElement("div");
+        left.className = "item-row-left";
+
+        const iconBox = document.createElement("span");
+        iconBox.className = "item-cat-icon";
+        iconBox.style.background = `color-mix(in srgb, ${color} 15%, transparent)`;
+        iconBox.style.color = color;
+        iconBox.innerHTML = catIconSvg(e.category, 16);
+
+        const textWrap = document.createElement("div");
+        textWrap.className = "item-row-text";
+
+        const primaryTitle = document.createElement("span");
+        primaryTitle.className = "item-primary-title";
+        primaryTitle.textContent = e.note ? e.note : e.category;
+
+        const secondaryMeta = document.createElement("div");
+        secondaryMeta.className = "item-secondary-meta";
+        const catText = document.createElement("span");
+        catText.textContent = e.note ? e.category : "Logged expense";
+        secondaryMeta.appendChild(catText);
+
+        if (e.recurringId) {
+          const recBadge = document.createElement("span");
+          recBadge.className = "item-badge-mini";
+          recBadge.textContent = "Recurring";
+          secondaryMeta.appendChild(recBadge);
+        }
+
+        textWrap.appendChild(primaryTitle);
+        textWrap.appendChild(secondaryMeta);
+
+        left.appendChild(iconBox);
+        left.appendChild(textWrap);
+
+        const right = document.createElement("div");
+        right.className = "item-row-right";
+        const amountSpan = document.createElement("span");
+        amountSpan.className = "expense-amount";
+        amountSpan.textContent = fmt(e.amount);
+        right.appendChild(amountSpan);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        row.addEventListener("click", () => {
+          const exp = expenses.find((x) => x.id === e.id);
+          if (exp) openExpenseSheet(exp);
+        });
+        itemsWrap.appendChild(row);
+      });
+
+      groupLi.appendChild(headerBtn);
+      groupLi.appendChild(itemsWrap);
+      fragment.appendChild(groupLi);
+    });
+  } else if (effectiveMode === "compact") {
+    sorted.forEach((e) => {
+      const li = document.createElement("li");
+      li.dataset.id = e.id;
+
+      const left = document.createElement("div");
+      left.className = "compact-row-left";
+
+      const dot = document.createElement("span");
+      dot.className = "cat-dot-sm";
+      dot.style.background = catColor(e.category);
+
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "compact-date";
+      dateSpan.textContent = e.dateISO ? e.dateISO.slice(5).replace("-", "/") : "";
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "compact-title";
+      titleSpan.textContent = e.note ? e.note : e.category;
+
+      left.appendChild(dot);
+      left.appendChild(dateSpan);
+      left.appendChild(titleSpan);
+
+      if (e.note) {
+        const hint = document.createElement("span");
+        hint.className = "compact-cat-hint";
+        hint.textContent = `· ${e.category}`;
+        left.appendChild(hint);
+      }
+
+      if (e.recurringId) {
+        const recTag = document.createElement("span");
+        recTag.className = "item-badge-mini";
+        recTag.textContent = "↻";
+        recTag.title = "Recurring bill";
+        left.appendChild(recTag);
+      }
+
+      const amountSpan = document.createElement("span");
+      amountSpan.className = "expense-amount";
+      amountSpan.textContent = fmt(e.amount);
+
+      li.appendChild(left);
+      li.appendChild(amountSpan);
+      li.addEventListener("click", () => {
+        const exp = expenses.find((x) => x.id === e.id);
+        if (exp) openExpenseSheet(exp);
+      });
+      fragment.appendChild(li);
+    });
+  } else {
+    // Grid Cards Mode
+    sorted.forEach((e) => {
+      const li = document.createElement("li");
+      li.dataset.id = e.id;
+      const color = catColor(e.category);
+
+      const top = document.createElement("div");
+      top.className = "grid-card-top";
+
+      const iconBox = document.createElement("span");
+      iconBox.className = "grid-card-icon";
+      iconBox.style.background = `color-mix(in srgb, ${color} 15%, transparent)`;
+      iconBox.style.color = color;
+      iconBox.innerHTML = catIconSvg(e.category, 14);
+
+      const dateSpan = document.createElement("span");
+      dateSpan.className = "grid-card-date";
+      dateSpan.textContent = formatShortExpenseDate(e.dateISO);
+
+      top.appendChild(iconBox);
+      top.appendChild(dateSpan);
+
+      const amt = document.createElement("div");
+      amt.className = "grid-card-amount";
+      amt.textContent = fmt(e.amount);
+
+      const bottom = document.createElement("div");
+      bottom.className = "grid-card-bottom";
+
+      const title = document.createElement("span");
+      title.className = "grid-card-title";
+      title.textContent = e.note ? e.note : e.category;
+
+      const sub = document.createElement("div");
+      sub.className = "grid-card-sub";
+      const catLabel = document.createElement("span");
+      catLabel.textContent = e.category;
+      sub.appendChild(catLabel);
+
+      if (e.recurringId) {
+        const recBadge = document.createElement("span");
+        recBadge.className = "item-badge-mini";
+        recBadge.textContent = "↻ Bill";
+        sub.appendChild(recBadge);
+      }
+
+      bottom.appendChild(title);
+      bottom.appendChild(sub);
+
+      li.appendChild(top);
+      li.appendChild(amt);
+      li.appendChild(bottom);
+      li.addEventListener("click", () => {
+        const exp = expenses.find((x) => x.id === e.id);
+        if (exp) openExpenseSheet(exp);
+      });
+      fragment.appendChild(li);
+    });
+  }
 
   container.appendChild(fragment);
 }
 
-function renderRecurring() {
-  $("recurring-empty").classList.toggle("hidden", recurring.length > 0);
-  $("recurring-list").innerHTML = recurring.map((r) => `
-    <li data-id="${escapeHtml(r.id)}">
-      <div class="recurring-main">
-        <span class="cat-dot-sm" style="background:${escapeHtml(catColor(r.category))}"></span>
-        <div class="recurring-text">
-          <span class="recurring-name">${escapeHtml(r.note)}</span>
-          <span class="recurring-sub">${escapeHtml(r.category)} · day ${escapeHtml(r.dayOfMonth)}</span>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span class="recurring-amount">${escapeHtml(fmt(r.amount))}</span>
-        <button class="recurring-delete" data-id="${escapeHtml(r.id)}" aria-label="Delete">&times;</button>
-      </div>
-    </li>`).join("");
+function formatOrdinalDay(day) {
+  const n = Number(day) || 1;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1: return `${n}st`;
+    case 2: return `${n}nd`;
+    case 3: return `${n}rd`;
+    default: return `${n}th`;
+  }
+}
 
-  $("recurring-list").querySelectorAll("li").forEach((li) => {
-    li.addEventListener("click", () => {
-      const r = recurring.find((x) => x.id === li.dataset.id);
-      if (r) openRecurringSheet(r);
+function renderRecurring() {
+  const sortedRec = [...recurring].sort((a, b) => (a.dayOfMonth || 1) - (b.dayOfMonth || 1));
+  const countBadge = $("recurring-count-badge");
+  const summaryBar = $("recurring-summary-bar");
+  const listEl = $("recurring-list");
+  const emptyEl = $("recurring-empty");
+
+  if (countBadge) {
+    countBadge.textContent = String(sortedRec.length);
+    countBadge.classList.toggle("hidden", sortedRec.length === 0);
+  }
+
+  if (emptyEl) emptyEl.classList.toggle("hidden", sortedRec.length > 0);
+  if (!listEl) return;
+
+  const effectiveMode =
+    recurringViewMode === "compact" || recurringViewMode === "grid" ? recurringViewMode : "list";
+  listEl.className = `recurring-list view-${effectiveMode}`;
+  listEl.innerHTML = "";
+
+  if (sortedRec.length === 0) {
+    if (summaryBar) summaryBar.classList.add("hidden");
+    return;
+  }
+
+  const now = new Date();
+  const viewPrefix = toLocalMonthPrefix(viewDate);
+  const isViewingCurrentMonth = viewPrefix === toLocalMonthPrefix(now);
+  const viewedMonthExpenses = expenses.filter((e) => e.dateISO && e.dateISO.startsWith(viewPrefix));
+  const loggedIds = new Set(viewedMonthExpenses.filter((e) => e.recurringId).map((e) => e.recurringId));
+
+  const recTotal = round2(sortedRec.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+  let paidCount = 0;
+
+  const getBillStatus = (r) => {
+    const isLogged =
+      loggedIds.has(r.id) ||
+      viewedMonthExpenses.some((e) => e.note === r.note && Number(e.amount) === Number(r.amount));
+    if (isLogged) {
+      paidCount++;
+      return { label: "Logged", cls: "paid" };
+    }
+    if (isViewingCurrentMonth) {
+      const diff = (r.dayOfMonth || 1) - now.getDate();
+      if (diff === 0) return { label: "Due today", cls: "upcoming" };
+      if (diff > 0 && diff <= 5) return { label: `In ${diff}d`, cls: "upcoming" };
+      return { label: `Due ${formatOrdinalDay(r.dayOfMonth)}`, cls: "" };
+    }
+    return { label: `Day ${r.dayOfMonth}`, cls: "" };
+  };
+
+  const itemsWithStatus = sortedRec.map((r) => ({ r, status: getBillStatus(r) }));
+
+  if (summaryBar) {
+    summaryBar.classList.remove("hidden");
+    const upcomingCount = sortedRec.length - paidCount;
+    const rightSummary = isViewingCurrentMonth
+      ? `${paidCount} logged · ${upcomingCount} upcoming`
+      : `${sortedRec.length} monthly bill${sortedRec.length === 1 ? "" : "s"}`;
+    summaryBar.innerHTML = `<span>Monthly fixed: <strong>${escapeHtml(fmt(recTotal))}</strong></span><span>${escapeHtml(rightSummary)}</span>`;
+  }
+
+  const frag = document.createDocumentFragment();
+
+  if (effectiveMode === "list") {
+    itemsWithStatus.forEach(({ r, status }) => {
+      const li = document.createElement("li");
+      li.dataset.id = r.id;
+      const color = catColor(r.category);
+
+      const left = document.createElement("div");
+      left.className = "item-row-left";
+
+      const iconBox = document.createElement("span");
+      iconBox.className = "item-cat-icon";
+      iconBox.style.background = `color-mix(in srgb, ${color} 15%, transparent)`;
+      iconBox.style.color = color;
+      iconBox.innerHTML = catIconSvg(r.category, 16);
+
+      const textWrap = document.createElement("div");
+      textWrap.className = "item-row-text";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "item-primary-title";
+      nameSpan.textContent = r.note;
+
+      const metaDiv = document.createElement("div");
+      metaDiv.className = "item-secondary-meta";
+      const subText = document.createElement("span");
+      subText.textContent = `${r.category} · ${formatOrdinalDay(r.dayOfMonth)} of month`;
+      metaDiv.appendChild(subText);
+
+      const statusPill = document.createElement("span");
+      statusPill.className = `item-badge-mini${status.cls ? ` ${status.cls}` : ""}`;
+      statusPill.textContent = status.label;
+      metaDiv.appendChild(statusPill);
+
+      textWrap.appendChild(nameSpan);
+      textWrap.appendChild(metaDiv);
+
+      left.appendChild(iconBox);
+      left.appendChild(textWrap);
+
+      const right = document.createElement("div");
+      right.className = "item-row-right";
+
+      const amtSpan = document.createElement("span");
+      amtSpan.className = "recurring-amount";
+      amtSpan.textContent = fmt(r.amount);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "recurring-delete";
+      delBtn.setAttribute("aria-label", "Delete recurring bill");
+      delBtn.textContent = "\u00d7";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteRecurring(r.id);
+      });
+
+      right.appendChild(amtSpan);
+      right.appendChild(delBtn);
+
+      li.appendChild(left);
+      li.appendChild(right);
+      li.addEventListener("click", () => {
+        const target = recurring.find((x) => x.id === r.id);
+        if (target) openRecurringSheet(target);
+      });
+      frag.appendChild(li);
     });
-  });
-  $("recurring-list").querySelectorAll(".recurring-delete").forEach((btn) => {
-    btn.addEventListener("click", (e) => { e.stopPropagation(); deleteRecurring(btn.dataset.id); });
-  });
+  } else if (effectiveMode === "compact") {
+    itemsWithStatus.forEach(({ r, status }) => {
+      const li = document.createElement("li");
+      li.dataset.id = r.id;
+
+      const left = document.createElement("div");
+      left.className = "compact-row-left";
+
+      const dot = document.createElement("span");
+      dot.className = "cat-dot-sm";
+      dot.style.background = catColor(r.category);
+
+      const daySpan = document.createElement("span");
+      daySpan.className = "compact-date";
+      daySpan.textContent = formatOrdinalDay(r.dayOfMonth);
+
+      const titleSpan = document.createElement("span");
+      titleSpan.className = "compact-title";
+      titleSpan.textContent = r.note;
+
+      const statusPill = document.createElement("span");
+      statusPill.className = `item-badge-mini${status.cls ? ` ${status.cls}` : ""}`;
+      statusPill.textContent = status.label;
+
+      left.appendChild(dot);
+      left.appendChild(daySpan);
+      left.appendChild(titleSpan);
+      left.appendChild(statusPill);
+
+      const right = document.createElement("div");
+      right.className = "item-row-right";
+
+      const amtSpan = document.createElement("span");
+      amtSpan.className = "recurring-amount";
+      amtSpan.textContent = fmt(r.amount);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "recurring-delete";
+      delBtn.setAttribute("aria-label", "Delete recurring bill");
+      delBtn.textContent = "\u00d7";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteRecurring(r.id);
+      });
+
+      right.appendChild(amtSpan);
+      right.appendChild(delBtn);
+
+      li.appendChild(left);
+      li.appendChild(right);
+      li.addEventListener("click", () => {
+        const target = recurring.find((x) => x.id === r.id);
+        if (target) openRecurringSheet(target);
+      });
+      frag.appendChild(li);
+    });
+  } else {
+    // Grid Cards Mode
+    itemsWithStatus.forEach(({ r, status }) => {
+      const li = document.createElement("li");
+      li.dataset.id = r.id;
+      const color = catColor(r.category);
+
+      const top = document.createElement("div");
+      top.className = "grid-card-top";
+
+      const iconBox = document.createElement("span");
+      iconBox.className = "grid-card-icon";
+      iconBox.style.background = `color-mix(in srgb, ${color} 15%, transparent)`;
+      iconBox.style.color = color;
+      iconBox.innerHTML = catIconSvg(r.category, 14);
+
+      const delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "recurring-delete-grid";
+      delBtn.setAttribute("aria-label", "Delete recurring bill");
+      delBtn.textContent = "\u00d7";
+      delBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        deleteRecurring(r.id);
+      });
+
+      top.appendChild(iconBox);
+      top.appendChild(delBtn);
+
+      const amt = document.createElement("div");
+      amt.className = "grid-card-amount";
+      amt.textContent = fmt(r.amount);
+
+      const bottom = document.createElement("div");
+      bottom.className = "grid-card-bottom";
+
+      const title = document.createElement("span");
+      title.className = "grid-card-title";
+      title.textContent = r.note;
+
+      const sub = document.createElement("div");
+      sub.className = "grid-card-sub";
+      const dayLabel = document.createElement("span");
+      dayLabel.textContent = formatOrdinalDay(r.dayOfMonth);
+      const statusPill = document.createElement("span");
+      statusPill.className = `item-badge-mini${status.cls ? ` ${status.cls}` : ""}`;
+      statusPill.textContent = status.label;
+      sub.appendChild(dayLabel);
+      sub.appendChild(statusPill);
+
+      bottom.appendChild(title);
+      bottom.appendChild(sub);
+
+      li.appendChild(top);
+      li.appendChild(amt);
+      li.appendChild(bottom);
+      li.addEventListener("click", () => {
+        const target = recurring.find((x) => x.id === r.id);
+        if (target) openRecurringSheet(target);
+      });
+      frag.appendChild(li);
+    });
+  }
+
+  listEl.appendChild(frag);
 }
 
 function escapeHtml(s) {
@@ -5584,6 +6681,11 @@ function closeTopmostOverlayLayer() {
     return true;
   }
 
+  if (isOverlayVisible("logout-modal")) {
+    $("logout-modal").classList.add("hidden");
+    return true;
+  }
+
   if (isOverlayVisible("guest-modal")) {
     $("guest-modal").classList.add("hidden");
     return true;
@@ -5648,7 +6750,11 @@ window.__handleAndroidBack = function __handleAndroidBack() {
   }
 
   if (isOtaUpdating) {
-    showToast("Please wait, installing update...");
+    if (!isOtaExtracting && typeof activeOtaCancelFn === "function") {
+      activeOtaCancelFn();
+      return "HANDLED";
+    }
+    showToast("Finishing update installation...");
     return "HANDLED";
   }
 
