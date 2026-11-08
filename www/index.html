@@ -666,61 +666,123 @@
       <!-- SPENDING & BUDGET SUMMARY CARD -->
       <div id="summary-card" class="summary-card">
         <div class="summary-card-head">
-          <span class="summary-card-title" id="summary-card-title">Overview</span>
-          <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="section-title-group">
+            <span class="summary-card-title" id="summary-card-title">Overview</span>
             <button
-              id="currency-btn"
-              class="icon-btn"
-              aria-label="Currency options"
-              title="Currency options"
-              style="width: 28px; height: 28px;"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2.2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M4 8h16M15 4l5 4-5 4" />
-                <path d="M20 16H4M9 12l-5 4 5 4" />
-              </svg>
-            </button>
-            <button id="set-budget-btn" class="link-btn" style="font-size: 12px; font-weight: 700;">Set month budget</button>
-            <button id="past-month-lock-btn" class="past-lock-chip hidden" type="button">Locked</button>
+              type="button"
+              id="tip-overview"
+              class="help-tip-btn"
+              data-tip="Overview separates your money into two clear layers: your overall Budget Pool on top (where you add income or savings) and your selected month's spending & budget cap below."
+              aria-label="About Overview"
+            >?</button>
           </div>
         </div>
 
+        <!-- TIER 1: GLOBAL BUDGET POOL -->
         <div id="global-budget-bar" class="global-budget-bar">
-          <div class="global-budget-info">
-            <span class="global-budget-label">Budget</span>
-            <span id="global-budget-value" class="global-budget-value">$0.00</span>
+          <div class="global-budget-left">
+            <div class="global-budget-label-row">
+              <span class="global-budget-label">Budget Pool</span>
+              <button
+                type="button"
+                id="tip-global-budget"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Your unallocated reserve of money. Add income or allowance here, then either set a monthly cap below or spend directly from this pool. Any unspent monthly budget automatically returns here when the month ends."
+                aria-label="About Budget Pool"
+              >?</button>
+            </div>
+            <div class="global-budget-val-row">
+              <span id="global-budget-value" class="global-budget-value">$0.00</span>
+              <span id="global-budget-sub" class="global-budget-sub">Available reserve</span>
+            </div>
           </div>
           <button id="open-global-budget-btn" class="global-budget-action-btn" type="button">
             + Add / History
           </button>
         </div>
 
-        <div id="summary-grid" class="summary-grid">
-          <div id="summary-stat-spent" class="summary-stat">
-            <span class="summary-stat-label" id="summary-spent-label">Spent</span>
-            <span id="summary-spent" class="summary-stat-value">$0.00</span>
+        <!-- TIER 2: SELECTED MONTH SPENDING & CAP -->
+        <div id="monthly-overview-section" class="monthly-overview-section">
+          <div class="monthly-overview-head">
+            <div class="monthly-overview-title-wrap">
+              <span id="monthly-overview-title" class="monthly-overview-title">This Month</span>
+              <span id="monthly-mode-pill" class="monthly-mode-pill">Unrestricted</span>
+            </div>
+            <div class="monthly-overview-actions">
+              <button id="set-budget-btn" class="month-budget-pill-btn" type="button">Set month budget</button>
+              <button id="past-month-lock-btn" class="past-lock-chip hidden" type="button">Locked</button>
+              <button
+                type="button"
+                id="tip-past-lock"
+                class="help-tip-btn help-tip-xs hidden"
+                data-tip="Past months are settled and locked so historical records stay intact. Unlocking lets you edit past expenses without altering your current Budget Pool."
+                aria-label="About past month lock"
+              >?</button>
+            </div>
           </div>
-          <div id="summary-stat-budget" class="summary-stat">
-            <span class="summary-stat-label" id="summary-budget-label">Month Budget</span>
-            <span id="summary-budget" class="summary-stat-value primary">$0.00</span>
-          </div>
-          <div id="summary-stat-remaining" class="summary-stat">
-            <span class="summary-stat-label" id="summary-remaining-label">Remaining</span>
-            <span id="summary-remaining" class="summary-stat-value safe">$0.00</span>
-          </div>
-        </div>
 
-        <div id="budget-progress-track" class="budget-progress-track">
-          <div id="budget-progress-fill" class="budget-progress-fill"></div>
+          <div id="summary-grid" class="summary-grid">
+            <div id="summary-stat-spent" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-spent-label">Spent</span>
+                <button
+                  type="button"
+                  id="tip-summary-spent"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Total expenses logged across this entire month."
+                  aria-label="About Spent"
+                >?</button>
+              </span>
+              <span id="summary-spent" class="summary-stat-value">$0.00</span>
+              <span id="summary-spent-sub" class="summary-stat-sub">Logged total</span>
+            </div>
+            <div id="summary-stat-budget" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-budget-label">Month Budget</span>
+                <button
+                  type="button"
+                  id="tip-summary-budget"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Your spending limit for this month."
+                  aria-label="About Month Budget"
+                >?</button>
+              </span>
+              <span id="summary-budget" class="summary-stat-value primary">$0.00</span>
+              <span id="summary-budget-sub" class="summary-stat-sub">Tap to set</span>
+            </div>
+            <div id="summary-stat-remaining" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-remaining-label">Remaining</span>
+                <button
+                  type="button"
+                  id="tip-summary-remaining"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="How much budget you still have left to spend this month."
+                  aria-label="About Remaining"
+                >?</button>
+              </span>
+              <span id="summary-remaining" class="summary-stat-value safe">$0.00</span>
+              <span id="summary-remaining-sub" class="summary-stat-sub">Left to spend</span>
+            </div>
+          </div>
+
+          <div id="budget-progress-wrap" class="budget-progress-wrap">
+            <div class="budget-progress-callout-track">
+              <div id="budget-progress-spent-tag" class="budget-progress-spent-tag">
+                Spent: $0.00 (0%)
+              </div>
+            </div>
+            <div class="budget-progress-bar-box">
+              <div id="budget-progress-track" class="budget-progress-track">
+                <div id="budget-progress-fill" class="budget-progress-fill"></div>
+              </div>
+              <div id="budget-progress-marker" class="budget-progress-marker" aria-hidden="true"></div>
+            </div>
+            <div class="budget-progress-ends">
+              <span id="budget-progress-start-label" class="budget-progress-end-val">$0.00</span>
+              <span id="budget-progress-end-label" class="budget-progress-end-val">$0.00</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -740,19 +802,55 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Analytics & Forecast</h2>
+          <div class="section-title-group">
+            <h2>Analytics &amp; Forecast</h2>
+            <button
+              type="button"
+              id="tip-forecast-panel"
+              class="help-tip-btn"
+              data-tip="Predicts your month-end spending by combining your daily spending habits with upcoming unpaid recurring bills."
+              aria-label="About Analytics and Forecast"
+            >?</button>
+          </div>
         </div>
         <div id="forecast-metrics" class="forecast-metrics hidden">
           <div id="metric-card-projected" class="metric-card">
-            <span class="metric-label">Projected</span>
+            <span class="metric-label-row">
+              <span class="metric-label">Projected</span>
+              <button
+                type="button"
+                id="tip-metric-projected"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Estimated total by the end of the month based on what you've spent so far, your daily variable pace, and upcoming unpaid recurring bills."
+                aria-label="About Projected"
+              >?</button>
+            </span>
             <span id="metric-projected" class="metric-value">$0.00</span>
           </div>
           <div id="metric-card-pace" class="metric-card">
-            <span class="metric-label" id="metric-pace-label">Daily Pace</span>
+            <span class="metric-label-row">
+              <span class="metric-label" id="metric-pace-label">Daily Pace</span>
+              <button
+                type="button"
+                id="tip-metric-pace"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Your blended daily spending rate on day-to-day items (excludes fixed recurring bills), weighted between prior months and this month."
+                aria-label="About Daily Pace"
+              >?</button>
+            </span>
             <span id="metric-pace" class="metric-value">$0.00</span>
           </div>
           <div id="metric-card-allowance" class="metric-card">
-            <span class="metric-label">Safe Daily</span>
+            <span class="metric-label-row">
+              <span class="metric-label">Safe Daily</span>
+              <button
+                type="button"
+                id="tip-metric-allowance"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Recommended daily limit for non-bill spending over the rest of the month to finish within budget after setting aside upcoming recurring bills."
+                aria-label="About Safe Daily"
+              >?</button>
+            </span>
             <span id="metric-allowance" class="metric-value">$0.00</span>
           </div>
         </div>
@@ -800,7 +898,16 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>By category</h2>
+          <div class="section-title-group">
+            <h2>By category</h2>
+            <button
+              type="button"
+              id="tip-category-panel"
+              class="help-tip-btn"
+              data-tip="Shows how your spending is split across categories for the selected month (or for a single day when a date filter is active)."
+              aria-label="About By category"
+            >?</button>
+          </div>
           <select
             id="category-sort"
             class="mini-select"
@@ -829,6 +936,13 @@
           <div class="section-title-group">
             <h2>Recurring bills</h2>
             <span id="recurring-count-badge" class="count-pill hidden">0</span>
+            <button
+              type="button"
+              id="tip-recurring-panel"
+              class="help-tip-btn"
+              data-tip="Fixed monthly subscriptions and bills. Each bill automatically logs an expense on its scheduled day when you open the app, and unpaid bills are factored into your monthly forecast."
+              aria-label="About Recurring bills"
+            >?</button>
           </div>
           <div class="panel-head-controls">
             <div id="recurring-view-toggle" class="view-mode-toggle" role="group" aria-label="Recurring bills layout">
@@ -855,6 +969,13 @@
           <div class="section-title-group">
             <h2>Expenses</h2>
             <span id="expense-count-badge" class="count-pill hidden">0</span>
+            <button
+              type="button"
+              id="tip-expenses-panel"
+              class="help-tip-btn"
+              data-tip="Your logged expenses for the selected month or day. Switch between Grouped by Day, Compact, and Grid views, filter by category, or tap any entry to edit."
+              aria-label="About Expenses"
+            >?</button>
           </div>
           <div class="panel-head-controls">
             <div id="expense-view-toggle" class="view-mode-toggle" role="group" aria-label="Expenses layout">
@@ -1021,7 +1142,16 @@
             required
           />
 
-          <label for="r-day">Day of month charged</label>
+          <div class="field-label-row">
+            <label for="r-day">Day of month charged</label>
+            <button
+              type="button"
+              id="tip-recurring-day"
+              class="help-tip-btn help-tip-xs"
+              data-tip="Limited to days 1–28 so recurring bills trigger reliably every single month, including February."
+              aria-label="About day of month charged"
+            >?</button>
+          </div>
           <input type="number" id="r-day" min="1" max="28" value="1" required />
 
           <div class="sheet-actions">
@@ -1057,7 +1187,16 @@
 
           <div class="budget-slider-section">
             <div class="budget-slider-head">
-              <label for="month-budget-slider" class="budget-slider-label" style="margin: 0;">Allocate from Budget</label>
+              <div class="section-title-group" style="gap: 5px;">
+                <label for="month-budget-slider" class="budget-slider-label" style="margin: 0;">Allocate from Budget Pool</label>
+                <button
+                  type="button"
+                  id="tip-month-allocate"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Borrows money from your Budget Pool to set a spending cap for this month. You can't set it below what you've already spent, and any unspent balance automatically returns to your Budget Pool when the month ends."
+                  aria-label="About monthly budget allocation"
+                >?</button>
+              </div>
               <span id="month-budget-slider-pct" class="budget-slider-pct">0%</span>
             </div>
             <div class="budget-slider-wrap">
@@ -1105,7 +1244,7 @@
       <div class="sheet-content">
         <div class="sheet-handle"></div>
         <div class="settings-header" style="margin-bottom: 6px;">
-          <h2>Budget</h2>
+          <h2>Budget Pool</h2>
           <button
             type="button"
             id="close-global-budget-btn"
@@ -1116,8 +1255,41 @@
           </button>
         </div>
         <div class="global-sheet-balance-card">
-          <span class="global-sheet-balance-label">Available Unallocated Budget</span>
-          <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+          <div class="global-sheet-balance-left">
+            <div class="section-title-group" style="gap: 5px;">
+              <span class="global-sheet-balance-label">Available Unallocated Reserve</span>
+              <button
+                type="button"
+                id="tip-global-sheet-avail"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Funds currently available in your reserve pool—not assigned to a monthly cap. You can also change or convert your active currency right from this card."
+                aria-label="About Available Unallocated Reserve"
+              >?</button>
+            </div>
+            <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+          </div>
+          <button
+            type="button"
+            id="currency-btn"
+            class="currency-pill-btn"
+            aria-label="Currency and conversion options"
+            title="Currency and conversion options"
+          >
+            <span id="global-currency-btn-label">USD ($)</span>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 8h16M15 4l5 4-5 4" />
+              <path d="M20 16H4M9 12l-5 4 5 4" />
+            </svg>
+          </button>
         </div>
 
         <form id="global-budget-form" style="margin-bottom: 18px;">
@@ -1361,7 +1533,71 @@
             </div>
           </div>
 
-          <!-- ACCORDION 3: SYNC OPTIONS -->
+          <!-- ACCORDION 3: CURRENCY -->
+          <div class="accordion-item" id="settings-currency-accordion">
+            <button type="button" class="accordion-header">
+              <span>Currency</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <div class="settings-currency-status-row">
+                  <div class="section-title-group" style="gap: 5px;">
+                    <span class="setting-title">Active Currency</span>
+                    <button
+                      type="button"
+                      id="tip-settings-currency"
+                      class="help-tip-btn help-tip-xs"
+                      data-tip="Change Symbol only swaps the currency sign shown next to numbers (e.g. $10 → €10). Convert Currency recalculates all budgets, bills, and expenses using live exchange rates."
+                      aria-label="About Currency options"
+                    >?</button>
+                  </div>
+                  <span id="settings-active-currency-badge" class="channel-badge stable">USD ($)</span>
+                </div>
+                <div class="settings-currency-actions">
+                  <button
+                    type="button"
+                    id="settings-change-currency-btn"
+                    class="btn-ghost style-btn-icon"
+                  >
+                    Change Symbol
+                  </button>
+                  <button
+                    type="button"
+                    id="settings-convert-currency-btn"
+                    class="btn-primary style-btn-icon"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M4 8h16M15 4l5 4-5 4" />
+                      <path d="M20 16H4M9 12l-5 4 5 4" />
+                    </svg>
+                    Convert
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 4: SYNC OPTIONS -->
           <div class="accordion-item" id="settings-sync-accordion">
             <button type="button" class="accordion-header">
               <span>Sync Options</span>
@@ -1381,7 +1617,16 @@
               <div class="accordion-content-inner">
                 <div class="settings-toggle-row">
                   <div>
-                    <span class="setting-title">Auto Sync</span>
+                    <div class="section-title-group" style="gap: 5px;">
+                      <span class="setting-title">Auto Sync</span>
+                      <button
+                        type="button"
+                        id="tip-settings-autosync"
+                        class="help-tip-btn help-tip-xs"
+                        data-tip="Automatically backs up and syncs your changes to the cloud in the background when online. Turn off if you prefer syncing manually with the top-right sync button."
+                        aria-label="About Auto Sync"
+                      >?</button>
+                    </div>
                     <p class="setting-desc">
                       Sync changes automatically in background
                     </p>
@@ -1399,7 +1644,7 @@
             </div>
           </div>
 
-          <!-- ACCORDION 4: EXPORT -->
+          <!-- ACCORDION 5: EXPORT -->
           <div class="accordion-item">
             <button type="button" class="accordion-header">
               <span>Export</span>
@@ -1439,7 +1684,7 @@
             </div>
           </div>
 
-          <!-- ACCORDION 5: ABOUT -->
+          <!-- ACCORDION 6: ABOUT -->
           <div class="accordion-item">
             <button type="button" class="accordion-header">
               <span>About</span>
@@ -1463,6 +1708,13 @@
                     <div style="display: flex; align-items: center; gap: 6px;">
                       <span id="about-package-channel-badge" class="channel-badge native">Built-in</span>
                       <span id="about-version-badge" class="version-badge">v0.2.1-beta</span>
+                      <button
+                        type="button"
+                        id="tip-about-channel"
+                        class="help-tip-btn help-tip-xs"
+                        data-tip="Indicates your active build track: Built-in (from your installed Android APK), Stable Update, or Testing Build."
+                        aria-label="About version badge"
+                      >?</button>
                     </div>
                   </div>
                   <p id="about-version-note" class="about-version-note hidden"></p>
@@ -1511,16 +1763,19 @@
                       <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.1-beta</h4>
                       <ul>
                         <li>
-                          <strong>Multi-Layer Android Back Navigation:</strong> Back gestures and buttons now close active UI layers one by one (dropdowns, date popovers, modals, sheets) with double-back confirmation to exit on the root screen.
+                          <strong>Redesigned Overview &amp; Spent Progress Bar:</strong> Clear separation between your Budget Pool and Monthly Spending, relocated Currency &amp; Month Budget controls, and an upgraded Spent bar with end-value labels and a live current-spent marker.
                         </li>
                         <li>
-                          <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, non-blocking startup update notifications, and a unified Update Center in Settings &rarr; About.
+                          <strong>Interactive Help Tooltips:</strong> Tap or hover <code>?</code> badges across Overview, Analytics, Bills, Budgets, and Settings for plain-language explanations.
                         </li>
                         <li>
-                          <strong>Faster &amp; More Reliable Update Checks:</strong> Instant update checks without hourly rate limits, plus a 10-minute cooldown on background startup checks.
+                          <strong>Multi-View Expenses &amp; Recurring Bills:</strong> Switch between Grouped-by-Day/Detailed, Compact, and Grid layouts, filter expenses by category, and step day-by-day or month-by-month from the top bar.
                         </li>
                         <li>
-                          <strong>Automatic App Upgrade Cleanup:</strong> Automatically refreshes cached updates whenever a newer Android app installation is detected.
+                          <strong>Multi-Layer Android Back Navigation &amp; Logout Confirmation:</strong> Back gestures close active popovers, modals, and sheets layer by layer, with confirmation before logging out.
+                        </li>
+                        <li>
+                          <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, responsive slow-network progress &amp; instant cancel, and automatic cleanup on app upgrades.
                         </li>
                       </ul>
 
@@ -1985,6 +2240,12 @@
         <path d="M20 6L9 17l-5-5" />
       </svg>
       <span id="toast-message"></span>
+    </div>
+
+    <!-- INTERACTIVE HELP TOOLTIP POPOVER -->
+    <div id="app-tooltip" class="app-tooltip hidden" role="tooltip">
+      <div id="app-tooltip-text" class="app-tooltip-text"></div>
+      <span class="app-tooltip-arrow" aria-hidden="true"></span>
     </div>
 
     <script>

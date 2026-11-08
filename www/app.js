@@ -1093,11 +1093,7 @@ async function syncCloudData(showToastFeedback = false) {
       if (uData.currencySymbol) {
         currencySymbol = uData.currencySymbol;
         safeSet("budgelist-currency-symbol", currencySymbol);
-        const sel = $("currency-select");
-        if (sel) {
-          sel.value = currencySymbol;
-          syncCustomSelect(sel);
-        }
+        updateCurrencyUI();
       }
 
       // Restore avatar
@@ -1202,6 +1198,7 @@ function updateProfileWidgetUI() {
 function openSettingsSheet() {
   updateProfileWidgetUI();
   updateAboutChannelBadge();
+  updateCurrencyUI();
   const savedName = safeGet(cacheKey("name")) || "";
   const autoSyncVal = safeGet(cacheKey("auto-sync")) !== "false";
 
@@ -1580,58 +1577,109 @@ function getCurrentCurrencyCode() {
   return "USD";
 }
 
-$("currency-btn").addEventListener("click", () => {
-  currencyMenuView.classList.remove("hidden");
-  currencyChangeView.classList.add("hidden");
-  currencyConvertView.classList.add("hidden");
-  $("currency-modal-title").textContent = "Currency Options";
-  currencyModal.classList.remove("hidden");
-});
+function getCurrencyDisplayLabel() {
+  const code = getCurrentCurrencyCode();
+  return currencySymbol === code ? code : `${code} (${currencySymbol})`;
+}
 
-$("close-currency-modal").addEventListener("click", () => currencyModal.classList.add("hidden"));
-$("back-currency-menu").addEventListener("click", () => {
-  currencyChangeView.classList.add("hidden");
-  currencyMenuView.classList.remove("hidden");
-  $("currency-modal-title").textContent = "Currency Options";
-});
-$("back-currency-menu-2").addEventListener("click", () => {
-  currencyConvertView.classList.add("hidden");
-  currencyMenuView.classList.remove("hidden");
-  $("currency-modal-title").textContent = "Currency Options";
-});
-
-$("menu-change-currency").addEventListener("click", () => {
-  currencyMenuView.classList.add("hidden");
-  currencyChangeView.classList.remove("hidden");
-  $("currency-modal-title").textContent = "Change Currency Symbol";
+function updateCurrencyUI() {
+  const label = getCurrencyDisplayLabel();
+  const settingsBadge = $("settings-active-currency-badge");
+  if (settingsBadge) settingsBadge.textContent = label;
+  const globalBtnLabel = $("global-currency-btn-label");
+  if (globalBtnLabel) globalBtnLabel.textContent = label;
   const sel = $("currency-select");
   if (sel) {
     sel.value = currencySymbol;
     syncCustomSelect(sel);
   }
-});
+}
 
-$("menu-convert-currency").addEventListener("click", () => {
+let currencyOpenedDirectly = false;
+
+function openCurrencyMenuModal() {
+  currencyOpenedDirectly = false;
+  currencyMenuView.classList.remove("hidden");
+  currencyChangeView.classList.add("hidden");
+  currencyConvertView.classList.add("hidden");
+  $("currency-modal-title").textContent = "Currency Options";
+  currencyModal.classList.remove("hidden");
+}
+
+function openCurrencyChangeModal(direct = false) {
+  currencyOpenedDirectly = Boolean(direct);
   currencyMenuView.classList.add("hidden");
+  currencyConvertView.classList.add("hidden");
+  currencyChangeView.classList.remove("hidden");
+  $("currency-modal-title").textContent = "Change Currency Symbol";
+  const backBtn = $("back-currency-menu");
+  if (backBtn) backBtn.textContent = currencyOpenedDirectly ? "Cancel" : "Back";
+  const sel = $("currency-select");
+  if (sel) {
+    sel.value = currencySymbol;
+    syncCustomSelect(sel);
+  }
+  currencyModal.classList.remove("hidden");
+}
+
+function openCurrencyConvertModal(direct = false) {
+  currencyOpenedDirectly = Boolean(direct);
+  currencyMenuView.classList.add("hidden");
+  currencyChangeView.classList.add("hidden");
   currencyConvertView.classList.remove("hidden");
-  $("currency-modal-title").textContent = "Convert Currency via API";
+  $("currency-modal-title").textContent = "Convert Currency";
+  const backBtn2 = $("back-currency-menu-2");
+  if (backBtn2) backBtn2.textContent = currencyOpenedDirectly ? "Cancel" : "Back";
 
   const currentCode = getCurrentCurrencyCode();
   const convertStatus = $("convert-status");
   if (convertStatus) {
-    convertStatus.innerHTML = `Current currency: <strong>${escapeHtml(currentCode)} (${escapeHtml(currencySymbol)})</strong>. Select target currency below:`;
+    convertStatus.innerHTML = `Active currency: <strong>${escapeHtml(currentCode)} (${escapeHtml(currencySymbol)})</strong>. Select target currency to recalculate all budgets, bills, and expenses using live exchange rates:`;
   }
-});
+  currencyModal.classList.remove("hidden");
+}
+
+function handleCurrencySubViewBack() {
+  if (currencyOpenedDirectly) {
+    currencyModal.classList.add("hidden");
+    currencyOpenedDirectly = false;
+    return;
+  }
+  currencyChangeView.classList.add("hidden");
+  currencyConvertView.classList.add("hidden");
+  currencyMenuView.classList.remove("hidden");
+  $("currency-modal-title").textContent = "Currency Options";
+}
+
+if ($("currency-btn")) {
+  $("currency-btn").addEventListener("click", openCurrencyMenuModal);
+}
+if ($("settings-change-currency-btn")) {
+  $("settings-change-currency-btn").addEventListener("click", () => openCurrencyChangeModal(true));
+}
+if ($("settings-convert-currency-btn")) {
+  $("settings-convert-currency-btn").addEventListener("click", () => openCurrencyConvertModal(true));
+}
+
+$("close-currency-modal").addEventListener("click", () => currencyModal.classList.add("hidden"));
+$("back-currency-menu").addEventListener("click", handleCurrencySubViewBack);
+$("back-currency-menu-2").addEventListener("click", handleCurrencySubViewBack);
+
+$("menu-change-currency").addEventListener("click", () => openCurrencyChangeModal(false));
+$("menu-convert-currency").addEventListener("click", () => openCurrencyConvertModal(false));
 
 $("save-currency-btn").addEventListener("click", () => {
   currencySymbol = $("currency-select").value;
   safeSet("budgelist-currency-symbol", currencySymbol);
+  updateCurrencyUI();
   enqueueSync({ type: "UPDATE_PROFILE", data: { currencySymbol } });
   currencyModal.classList.add("hidden");
   render();
   renderRecurring();
   showToast(`Currency symbol updated to ${currencySymbol}`);
 });
+
+updateCurrencyUI();
 
 $("execute-convert-btn").addEventListener("click", () => {
   const target = $("convert-target-select").value;
@@ -1713,12 +1761,7 @@ async function convertCurrencyTo(targetCurrency) {
     const targetSymbol = CURRENCY_MAP[targetCurrency] || targetCurrency;
     currencySymbol = targetSymbol;
     safeSet("budgelist-currency-symbol", currencySymbol);
-
-    const sel = $("currency-select");
-    if (sel) {
-      sel.value = currencySymbol;
-      syncCustomSelect(sel);
-    }
+    updateCurrencyUI();
 
     saveLocalUserCache();
 
@@ -4279,14 +4322,18 @@ function updateMonthBudgetSheetVisuals(amountVal, animateThumb = false, forceMin
   });
 
   if (noticeEl) {
+    noticeEl.dataset.openGlobal = "0";
+    noticeEl.style.cursor = "";
     if (maxAllocatable <= 0) {
-      noticeEl.textContent = `Your available Budget is ${fmt(0)}. Add funds to your Budget first to lend a budget to this month.`;
+      noticeEl.textContent = `Your Budget Pool is currently ${fmt(0)}. Tap here to add funds to your Budget Pool first →`;
+      noticeEl.dataset.openGlobal = "1";
+      noticeEl.style.cursor = "pointer";
       noticeEl.classList.remove("hidden");
     } else if (forceMinNotice || (spentSoFar > 0 && clampedVal <= minAllocatable && minAllocatable > 0)) {
       noticeEl.textContent = `Minimum budget for this month is ${fmt(minAllocatable)} because ${fmt(spentSoFar)} has already been spent. (Tap 'Unrestrict' below to remove the monthly limit.)`;
       noticeEl.classList.remove("hidden");
     } else if (clampedVal >= maxAllocatable && maxAllocatable > 0) {
-      noticeEl.textContent = `Notice: You are allocating 100% of your available Budget (${fmt(maxAllocatable)}) to this month.`;
+      noticeEl.textContent = `Notice: You are allocating 100% of your available Budget Pool (${fmt(maxAllocatable)}) to this month.`;
       noticeEl.classList.remove("hidden");
     } else {
       noticeEl.classList.add("hidden");
@@ -4466,6 +4513,25 @@ budgetBtn.addEventListener("click", openMonthBudgetSheet);
 const unrestrictedSetBudgetBtn = $("unrestricted-set-budget-btn");
 if (unrestrictedSetBudgetBtn) {
   unrestrictedSetBudgetBtn.addEventListener("click", openMonthBudgetSheet);
+}
+const summaryStatBudgetCard = $("summary-stat-budget");
+if (summaryStatBudgetCard) {
+  summaryStatBudgetCard.addEventListener("click", (e) => {
+    if (e.target && e.target.closest(".help-tip-btn")) return;
+    const ym = toLocalMonthPrefix(viewDate);
+    if (!isPastMonth(ym)) {
+      openMonthBudgetSheet();
+    }
+  });
+}
+const monthSheetNoticeEl = $("month-budget-sheet-notice");
+if (monthSheetNoticeEl) {
+  monthSheetNoticeEl.addEventListener("click", () => {
+    if (monthSheetNoticeEl.dataset.openGlobal === "1") {
+      budgetSheet.classList.add("hidden");
+      openGlobalBudgetSheet();
+    }
+  });
 }
 $("cancel-budget").addEventListener("click", () => budgetSheet.classList.add("hidden"));
 
@@ -5191,69 +5257,164 @@ if (clearDayFilterBtn) {
   });
 }
 
+function updateSpentProgressBar(spent, limitAmount, modeLabel, stateOverride) {
+  const progressFill = $("budget-progress-fill");
+  const markerEl = $("budget-progress-marker");
+  const spentTagEl = $("budget-progress-spent-tag");
+  const startLabelEl = $("budget-progress-start-label");
+  const endLabelEl = $("budget-progress-end-label");
+
+  let pct = 0;
+  let visualState = stateOverride || "";
+  let tagText = `Spent: ${fmt(spent)}`;
+
+  if (limitAmount > 0) {
+    if (spent > limitAmount) {
+      pct = 100;
+      visualState = "over";
+      tagText = `Spent: ${fmt(spent)} (+${fmt(round2(spent - limitAmount))} over)`;
+    } else {
+      pct = Math.min(100, Math.max(0, (spent / limitAmount) * 100));
+      if (!visualState) {
+        visualState = pct >= 85 && spent > 0 ? "caution" : "";
+      }
+      tagText = `Spent: ${fmt(spent)} (${Math.round(pct)}%)`;
+    }
+  } else if (spent > 0) {
+    pct = 100;
+    visualState = "over";
+    tagText = `Spent: ${fmt(spent)} (Over)`;
+  } else {
+    pct = 0;
+    visualState = "neutral";
+    tagText = `Spent: ${fmt(0)}`;
+  }
+
+  const pctFixed = pct.toFixed(2);
+
+  if (progressFill) {
+    progressFill.style.width = `${pctFixed}%`;
+    progressFill.className = `budget-progress-fill${visualState && visualState !== "neutral" ? ` ${visualState}` : ""}`;
+  }
+  if (markerEl) {
+    markerEl.style.setProperty("--spent-pct", `${pctFixed}%`);
+    markerEl.className = `budget-progress-marker${visualState ? ` ${visualState}` : ""}`;
+  }
+  if (spentTagEl) {
+    spentTagEl.style.left = `${pctFixed}%`;
+    spentTagEl.style.transform = `translateX(-${pctFixed}%)`;
+    spentTagEl.textContent = tagText;
+    spentTagEl.className = `budget-progress-spent-tag${visualState ? ` ${visualState}` : ""}`;
+  }
+  if (startLabelEl) {
+    startLabelEl.textContent = fmt(0);
+  }
+  if (endLabelEl) {
+    endLabelEl.textContent = limitAmount > 0
+      ? `${fmt(limitAmount)} ${modeLabel}`
+      : "No budget set";
+  }
+}
+
 function renderSummaryCard(spent) {
   const ym = toLocalMonthPrefix(viewDate);
+  const realNowYm = toLocalMonthPrefix(new Date());
   const past = isPastMonth(ym);
   const rec = ensureMonthRecord(ym);
 
-  // Global Budget Bar (always visible & accessible anywhere)
+  // Tier 1: Global Budget Pool (always visible & accessible anywhere)
   const globalValEl = $("global-budget-value");
+  const globalSubEl = $("global-budget-sub");
+  const tipGlobalEl = $("tip-global-budget");
   if (globalValEl) {
     globalValEl.textContent = fmt(globalBudget);
     globalValEl.className = "global-budget-value";
   }
+  if (globalSubEl) {
+    globalSubEl.textContent = globalBudget > 0 ? "Available reserve" : "Tap + Add to fund";
+  }
+  if (tipGlobalEl) {
+    tipGlobalEl.dataset.tip = globalBudget > 0
+      ? `Your Budget Pool holds ${fmt(globalBudget)} in unallocated reserve funds. Allocate part of it to a monthly cap below, or leave months on 'Uses Pool' to deduct expenses directly. Unspent monthly budget automatically returns here once a month ends.`
+      : `Your Budget Pool is currently ${fmt(0)}. Tap '+ Add / History' to deposit your income, allowance, or savings—then set a monthly cap or spend directly from this pool.`;
+  }
 
+  const monthlyTitleEl = $("monthly-overview-title");
+  const monthlyModePill = $("monthly-mode-pill");
   const summaryGrid = $("summary-grid");
   const summarySpentLabel = $("summary-spent-label");
   const summarySpent = $("summary-spent");
+  const summarySpentSub = $("summary-spent-sub");
+  const summaryStatBudget = $("summary-stat-budget");
   const summaryBudgetLabel = $("summary-budget-label");
   const summaryBudget = $("summary-budget");
+  const summaryBudgetSub = $("summary-budget-sub");
   const summaryStatRemaining = $("summary-stat-remaining");
   const summaryRemaining = $("summary-remaining");
   const summaryRemainingLabel = $("summary-remaining-label");
-  const progressTrack = $("budget-progress-track");
-  const progressFill = $("budget-progress-fill");
+  const summaryRemainingSub = $("summary-remaining-sub");
+  const progressWrap = $("budget-progress-wrap");
   const setBudgetBtnEl = $("set-budget-btn");
   const pastLockBtnEl = $("past-month-lock-btn");
+  const tipPastLockEl = $("tip-past-lock");
+  const tipSpentEl = $("tip-summary-spent");
+  const tipBudgetEl = $("tip-summary-budget");
+  const tipRemainingEl = $("tip-summary-remaining");
   const unrestrictedNotice = $("unrestricted-budget-notice");
-  const unrestrictedNoticeText = $("unrestricted-budget-notice-text");
   const pastNotice = $("past-month-notice");
   const pastNoticeText = $("past-month-notice-text");
   const pastNoticeBtn = $("past-month-notice-btn");
 
   if (summarySpent) summarySpent.textContent = fmt(spent);
+  if (summaryStatBudget) summaryStatBudget.classList.toggle("interactive", !past);
+  if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
 
   if (past) {
-    // Past Month History View: hide irrelevant forward-looking details (Remaining, Set Budget)
+    // Past Month History View: hide forward-looking details (Remaining, Progress Bar, Set Budget)
+    if (monthlyTitleEl) monthlyTitleEl.textContent = monthLabelFmt.format(viewDate);
+    if (monthlyModePill) monthlyModePill.classList.add("hidden");
     if (setBudgetBtnEl) setBudgetBtnEl.classList.add("hidden");
     if (pastLockBtnEl) {
       pastLockBtnEl.classList.remove("hidden");
       pastLockBtnEl.classList.toggle("unlocked", Boolean(rec.unlocked));
       pastLockBtnEl.textContent = rec.unlocked ? "Unlocked" : "Locked";
     }
+    if (tipPastLockEl) tipPastLockEl.classList.remove("hidden");
     if (summaryGrid) summaryGrid.classList.add("two-col");
     if (summaryStatRemaining) summaryStatRemaining.classList.add("hidden");
-    if (progressTrack) progressTrack.classList.add("hidden");
-    if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
+    if (progressWrap) progressWrap.classList.add("hidden");
 
     if (summarySpentLabel) summarySpentLabel.textContent = "Total Spent";
+    if (summarySpentSub) summarySpentSub.textContent = "Final month total";
+    if (tipSpentEl) {
+      tipSpentEl.dataset.tip = `Final recorded spending for ${formatMonthYearLabel(ym)} (${fmt(spent)}).`;
+    }
+
     if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Recorded Budget";
     const histAllocated = round2(rec.finalAllocated != null ? rec.finalAllocated : (rec.allocated || 0));
+    const retAmt = round2(rec.returnedToGlobal || 0);
     if (summaryBudget) {
-      summaryBudget.textContent = histAllocated > 0 ? fmt(histAllocated) : "Unrestricted";
+      summaryBudget.textContent = histAllocated > 0 ? fmt(histAllocated) : "No Cap";
+    }
+    if (summaryBudgetSub) {
+      summaryBudgetSub.textContent = histAllocated > 0 ? "Historical cap" : "Used Budget Pool";
+    }
+    if (tipBudgetEl) {
+      tipBudgetEl.dataset.tip = histAllocated > 0
+        ? `${formatMonthYearLabel(ym)} had a ${fmt(histAllocated)} monthly budget cap.${retAmt > 0 ? ` ${fmt(retAmt)} unspent was returned to your Budget Pool.` : ""}`
+        : `No separate monthly cap was set for ${formatMonthYearLabel(ym)}—expenses drew directly from your Budget Pool.`;
     }
 
     if (pastNotice && pastNoticeText && pastNoticeBtn) {
       pastNotice.classList.remove("hidden");
       pastNotice.classList.toggle("unlocked", Boolean(rec.unlocked));
       if (rec.unlocked) {
-        pastNoticeText.textContent = "Past month unlocked — Editing expenses updates this month's history only and will not affect your current Budget.";
+        pastNoticeText.textContent = "Past month unlocked — Editing expenses updates this month's history only and will not affect your current Budget Pool.";
         pastNoticeBtn.textContent = "Lock month";
       } else {
-        const retAmt = round2(rec.returnedToGlobal || 0);
         pastNoticeText.textContent = histAllocated > 0
-          ? `Past Month History (Locked) · ${retAmt > 0 ? `Returned ${fmt(retAmt)} to Budget.` : "Settled."}`
-          : "Past Month History (Locked) · Unrestricted month.";
+          ? `Past Month History (Locked) · ${retAmt > 0 ? `Returned ${fmt(retAmt)} to Budget Pool.` : "Settled."}`
+          : "Past Month History (Locked) · Used Budget Pool.";
         pastNoticeBtn.textContent = "Unlock";
       }
     }
@@ -5261,23 +5422,48 @@ function renderSummaryCard(spent) {
   }
 
   // Current or Future Month View
+  const allocated = round2(rec.allocated || 0);
+  const isCurrent = ym === realNowYm;
+
+  if (monthlyTitleEl) {
+    monthlyTitleEl.textContent = isCurrent ? "This Month" : monthLabelFmt.format(viewDate);
+  }
+  if (monthlyModePill) {
+    monthlyModePill.classList.remove("hidden");
+    monthlyModePill.classList.toggle("capped", allocated > 0);
+    monthlyModePill.textContent = allocated > 0 ? "Monthly Cap" : "Uses Pool";
+  }
   if (setBudgetBtnEl) {
     setBudgetBtnEl.classList.remove("hidden");
-    setBudgetBtnEl.textContent = (rec.allocated || 0) > 0 ? "Edit month budget" : "Set month budget";
+    setBudgetBtnEl.textContent = allocated > 0 ? "Edit month budget" : "Set month budget";
   }
   if (pastLockBtnEl) pastLockBtnEl.classList.add("hidden");
+  if (tipPastLockEl) tipPastLockEl.classList.add("hidden");
   if (pastNotice) pastNotice.classList.add("hidden");
   if (summaryGrid) summaryGrid.classList.remove("two-col");
   if (summaryStatRemaining) summaryStatRemaining.classList.remove("hidden");
-  if (progressTrack) progressTrack.classList.remove("hidden");
-  if (summarySpentLabel) summarySpentLabel.textContent = "Spent";
+  if (progressWrap) progressWrap.classList.remove("hidden");
 
-  const allocated = round2(rec.allocated || 0);
+  if (summarySpentLabel) summarySpentLabel.textContent = "Spent";
+  if (summarySpentSub) summarySpentSub.textContent = isCurrent ? "So far this month" : "Scheduled total";
+  if (tipSpentEl) {
+    tipSpentEl.dataset.tip = isCurrent
+      ? `Total expenses logged across ${formatMonthYearLabel(ym)} so far (${fmt(spent)}).`
+      : `Total scheduled expenses logged for ${formatMonthYearLabel(ym)} (${fmt(spent)}).`;
+  }
+
   if (allocated > 0) {
-    // Restricted Month Mode
-    if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
+    // Restricted Month Mode (Fixed Monthly Cap)
     if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Month Budget";
     if (summaryBudget) summaryBudget.textContent = fmt(allocated);
+    if (summaryBudgetSub) summaryBudgetSub.textContent = "Monthly cap";
+    const directCov = round2(rec.directCovered || 0);
+    if (tipBudgetEl) {
+      tipBudgetEl.dataset.tip =
+        `Fixed spending cap of ${fmt(allocated)} borrowed from your Budget Pool for ${formatMonthYearLabel(ym)}.` +
+        (directCov > 0 ? ` (An extra ${fmt(directCov)} overage was covered directly from your Budget Pool.)` : "") +
+        " Any unspent amount automatically returns to your Budget Pool when the month ends. Tap to edit.";
+    }
 
     const remaining = round2(allocated - spent);
     if (remaining < 0) {
@@ -5286,36 +5472,41 @@ function renderSummaryCard(spent) {
         summaryRemaining.textContent = fmt(Math.abs(remaining));
         summaryRemaining.className = "summary-stat-value warn";
       }
-      if (progressFill) {
-        progressFill.style.width = "100%";
-        progressFill.className = "budget-progress-fill over";
+      if (summaryRemainingSub) summaryRemainingSub.textContent = "Above cap";
+      if (tipRemainingEl) {
+        tipRemainingEl.dataset.tip = `You have exceeded your ${fmt(allocated)} monthly cap by ${fmt(Math.abs(remaining))} (${fmt(spent)} spent).`;
       }
+      updateSpentProgressBar(spent, allocated, "cap", "over");
     } else {
       if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+      const isTight = spent > 0 && remaining <= allocated * 0.15;
       if (summaryRemaining) {
         summaryRemaining.textContent = fmt(remaining);
-        summaryRemaining.className = "summary-stat-value safe";
+        summaryRemaining.className = `summary-stat-value ${isTight ? "caution" : "safe"}`;
       }
-      const percent = Math.min(100, Math.max(0, (spent / allocated) * 100));
-      if (progressFill) {
-        progressFill.style.width = `${percent}%`;
-        progressFill.className = "budget-progress-fill";
+      if (summaryRemainingSub) summaryRemainingSub.textContent = "Left in cap";
+      if (tipRemainingEl) {
+        tipRemainingEl.dataset.tip = `${fmt(remaining)} remaining out of your ${fmt(allocated)} monthly cap (${fmt(spent)} spent so far).`;
       }
+      updateSpentProgressBar(spent, allocated, "cap", "");
     }
   } else {
-    // Unrestricted Month Mode (falls back directly to Global Budget)
-    if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Budget (Global)";
-    const effectivePool = round2(globalBudget + (rec.unrestrictedDeducted || 0));
-
-    if (unrestrictedNotice && unrestrictedNoticeText) {
-      unrestrictedNotice.classList.remove("hidden");
-      unrestrictedNoticeText.textContent = effectivePool > 0
-        ? `Unrestricted Month — Expenses deduct directly from your Budget (${fmt(globalBudget)} remaining).`
-        : "Unrestricted Month — No monthly budget set. Expenses will deduct from your Budget.";
-    }
+    // Unrestricted Month Mode (Draws directly from Budget Pool)
+    const unrestrictedDeducted = round2(rec.unrestrictedDeducted || 0);
+    const effectivePool = round2(globalBudget + unrestrictedDeducted);
 
     if (effectivePool > 0 || spent > 0) {
+      if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Pool Limit";
       if (summaryBudget) summaryBudget.textContent = fmt(effectivePool);
+      if (summaryBudgetSub) {
+        summaryBudgetSub.textContent = unrestrictedDeducted > 0 ? "Spent + pool" : "From Budget Pool";
+      }
+      if (tipBudgetEl) {
+        tipBudgetEl.dataset.tip = unrestrictedDeducted > 0
+          ? `No separate monthly cap is set, so expenses deduct directly from your Budget Pool. Pool Limit (${fmt(effectivePool)}) = ${fmt(unrestrictedDeducted)} already deducted for this month's expenses + ${fmt(globalBudget)} remaining in your Budget Pool. Tap 'Set month budget' to set a fixed monthly cap.`
+          : `No separate monthly cap is set, so this month can use up to ${fmt(effectivePool)} from your Budget Pool. Tap 'Set month budget' if you want a smaller monthly spending cap.`;
+      }
+
       const remaining = round2(effectivePool - spent);
       if (remaining < 0) {
         if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Over";
@@ -5323,33 +5514,41 @@ function renderSummaryCard(spent) {
           summaryRemaining.textContent = fmt(Math.abs(remaining));
           summaryRemaining.className = "summary-stat-value warn";
         }
-        if (progressFill) {
-          progressFill.style.width = "100%";
-          progressFill.className = "budget-progress-fill over";
+        if (summaryRemainingSub) summaryRemainingSub.textContent = "Above pool";
+        if (tipRemainingEl) {
+          tipRemainingEl.dataset.tip = `This month's spending (${fmt(spent)}) exceeds your Budget Pool capacity (${fmt(effectivePool)}) by ${fmt(Math.abs(remaining))}.`;
         }
+        updateSpentProgressBar(spent, effectivePool, "pool", "over");
       } else {
         if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
+        const isTight = effectivePool > 0 && spent > 0 && globalBudget <= effectivePool * 0.15;
         if (summaryRemaining) {
           summaryRemaining.textContent = fmt(globalBudget);
-          summaryRemaining.className = "summary-stat-value safe";
+          summaryRemaining.className = `summary-stat-value ${isTight ? "caution" : "safe"}`;
         }
-        const percent = effectivePool > 0 ? Math.min(100, Math.max(0, (spent / effectivePool) * 100)) : 0;
-        if (progressFill) {
-          progressFill.style.width = `${percent}%`;
-          progressFill.className = "budget-progress-fill";
+        if (summaryRemainingSub) summaryRemainingSub.textContent = "Left in pool";
+        if (tipRemainingEl) {
+          tipRemainingEl.dataset.tip = `${fmt(globalBudget)} remaining in your Budget Pool after ${fmt(spent)} spent this month.`;
         }
+        updateSpentProgressBar(spent, effectivePool, "pool", "");
       }
     } else {
+      if (summaryBudgetLabel) summaryBudgetLabel.textContent = "Month Budget";
       if (summaryBudget) summaryBudget.textContent = fmt(0);
+      if (summaryBudgetSub) summaryBudgetSub.textContent = "Add pool first";
+      if (tipBudgetEl) {
+        tipBudgetEl.dataset.tip = "No budget set yet. Tap '+ Add / History' on Budget Pool above to add funds first, then optionally set a monthly cap here.";
+      }
       if (summaryRemainingLabel) summaryRemainingLabel.textContent = "Remaining";
       if (summaryRemaining) {
-        summaryRemaining.textContent = "N/A";
+        summaryRemaining.textContent = fmt(0);
         summaryRemaining.className = "summary-stat-value";
       }
-      if (progressFill) {
-        progressFill.style.width = "0%";
-        progressFill.className = "budget-progress-fill";
+      if (summaryRemainingSub) summaryRemainingSub.textContent = "No funds yet";
+      if (tipRemainingEl) {
+        tipRemainingEl.dataset.tip = "Add funds to your Budget Pool above to start tracking your remaining balance.";
       }
+      updateSpentProgressBar(0, 0, "pool", "neutral");
     }
   }
 }
@@ -6338,7 +6537,7 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
   const activeBudgetForCalc = past
     ? round2(rec.finalAllocated != null ? rec.finalAllocated : allocated)
     : (allocated > 0 ? allocated : round2(globalBudget + (rec.unrestrictedDeducted || 0)));
-  const budgetTypeLabel = isUnrestricted ? "Budget (Global)" : "monthly budget";
+  const budgetTypeLabel = isUnrestricted ? "Budget Pool" : "monthly budget";
 
   // 5. Calculate Safe Daily Spend Allowance
   const remainingDays = Math.max(1, daysInMonth - today);
@@ -6352,6 +6551,7 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
   const projCardEl = $("metric-card-projected");
   const allowCardEl = $("metric-card-allowance");
   const paceLabelEl = $("metric-pace-label");
+  const tipPaceEl = $("tip-metric-pace");
   const projValEl = $("metric-projected");
   const paceValEl = $("metric-pace");
   const allowValEl = $("metric-allowance");
@@ -6361,11 +6561,17 @@ function renderForecast(monthExpenses, isCurrentMonth, daysInMonth, today) {
     if (allowCardEl) allowCardEl.classList.add("hidden");
     if (metricsEl) metricsEl.classList.add("one-col");
     if (paceLabelEl) paceLabelEl.textContent = "Daily Average";
+    if (tipPaceEl) {
+      tipPaceEl.dataset.tip = `Average daily variable spending (excluding recurring bills) recorded across ${formatMonthYearLabel(ym)}.`;
+    }
   } else {
     if (projCardEl) projCardEl.classList.remove("hidden");
     if (allowCardEl) allowCardEl.classList.remove("hidden");
     if (metricsEl) metricsEl.classList.remove("one-col");
     if (paceLabelEl) paceLabelEl.textContent = "Daily Pace";
+    if (tipPaceEl) {
+      tipPaceEl.dataset.tip = "Your blended daily spending rate on day-to-day items (excludes fixed recurring bills), weighted between prior months and this month.";
+    }
   }
 
   if (projValEl) projValEl.textContent = fmt(projectedTotal);
@@ -6611,12 +6817,143 @@ setTimeout(() => {
   updateBodyScrollLock();
 }, 200);
 
+// ---------- Universal Interactive Help Tooltips ----------
+let activeTooltipBtn = null;
+let tooltipPinnedByClick = false;
+
+function hideAppTooltip() {
+  const tipEl = $("app-tooltip");
+  if (tipEl) {
+    tipEl.classList.add("hidden");
+    tipEl.classList.remove("placed-above", "placed-below");
+  }
+  if (activeTooltipBtn) {
+    activeTooltipBtn.classList.remove("active");
+    activeTooltipBtn.setAttribute("aria-expanded", "false");
+  }
+  activeTooltipBtn = null;
+  tooltipPinnedByClick = false;
+}
+
+function positionAppTooltip(anchorEl) {
+  const tipEl = $("app-tooltip");
+  if (!tipEl || !anchorEl) return;
+
+  const rect = anchorEl.getBoundingClientRect();
+  if (rect.width === 0 && rect.height === 0) {
+    hideAppTooltip();
+    return;
+  }
+
+  tipEl.style.left = "12px";
+  tipEl.style.top = "0px";
+  const tipW = tipEl.offsetWidth || 240;
+  const tipH = tipEl.offsetHeight || 64;
+  const vw = window.innerWidth || document.documentElement.clientWidth || 360;
+  const vh = window.innerHeight || document.documentElement.clientHeight || 640;
+  const margin = 12;
+
+  const anchorCenterX = rect.left + rect.width / 2;
+  let left = Math.round(anchorCenterX - tipW / 2);
+  left = Math.max(margin, Math.min(left, vw - tipW - margin));
+
+  let top = Math.round(rect.top - tipH - 10);
+  let placedAbove = true;
+  if (top < margin && rect.bottom + tipH + 10 <= vh - margin) {
+    top = Math.round(rect.bottom + 10);
+    placedAbove = false;
+  } else if (top < margin) {
+    top = Math.max(margin, Math.round(rect.bottom + 10));
+    placedAbove = false;
+  }
+
+  const arrowX = Math.max(16, Math.min(tipW - 16, Math.round(anchorCenterX - left)));
+  tipEl.style.left = `${left}px`;
+  tipEl.style.top = `${top}px`;
+  tipEl.style.setProperty("--tip-arrow-x", `${arrowX}px`);
+  tipEl.classList.toggle("placed-above", placedAbove);
+  tipEl.classList.toggle("placed-below", !placedAbove);
+}
+
+function showAppTooltip(btn, pinned = false) {
+  const tipEl = $("app-tooltip");
+  const textEl = $("app-tooltip-text");
+  if (!tipEl || !textEl || !btn) return;
+  const msg = btn.dataset.tip || "";
+  if (!msg) return;
+
+  if (activeTooltipBtn && activeTooltipBtn !== btn) {
+    activeTooltipBtn.classList.remove("active");
+    activeTooltipBtn.setAttribute("aria-expanded", "false");
+  }
+
+  activeTooltipBtn = btn;
+  tooltipPinnedByClick = Boolean(pinned);
+  btn.classList.add("active");
+  btn.setAttribute("aria-expanded", "true");
+  textEl.textContent = msg;
+  tipEl.classList.remove("hidden");
+  positionAppTooltip(btn);
+}
+
+document.addEventListener("click", (e) => {
+  const tipBtn = e.target && e.target.closest ? e.target.closest(".help-tip-btn") : null;
+  if (tipBtn) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (activeTooltipBtn === tipBtn && isOverlayVisible("app-tooltip") && tooltipPinnedByClick) {
+      hideAppTooltip();
+    } else {
+      showAppTooltip(tipBtn, true);
+    }
+    return;
+  }
+  const insideTip = e.target && e.target.closest ? e.target.closest("#app-tooltip") : null;
+  if (!insideTip && isOverlayVisible("app-tooltip")) {
+    hideAppTooltip();
+  }
+}, true);
+
+document.addEventListener("pointerover", (e) => {
+  if (e.pointerType !== "mouse") return;
+  const tipBtn = e.target && e.target.closest ? e.target.closest(".help-tip-btn") : null;
+  if (tipBtn && (!tooltipPinnedByClick || activeTooltipBtn !== tipBtn)) {
+    showAppTooltip(tipBtn, false);
+  }
+});
+
+document.addEventListener("pointerout", (e) => {
+  if (e.pointerType !== "mouse" || tooltipPinnedByClick) return;
+  const tipBtn = e.target && e.target.closest ? e.target.closest(".help-tip-btn") : null;
+  if (tipBtn && activeTooltipBtn === tipBtn) {
+    const rel = e.relatedTarget;
+    if (rel && (tipBtn.contains(rel) || (rel.closest && rel.closest("#app-tooltip")))) return;
+    hideAppTooltip();
+  }
+});
+
+window.addEventListener("scroll", () => {
+  if (isOverlayVisible("app-tooltip")) hideAppTooltip();
+}, true);
+
+window.addEventListener("resize", () => {
+  if (isOverlayVisible("app-tooltip") && activeTooltipBtn) {
+    positionAppTooltip(activeTooltipBtn);
+  }
+});
+
 function isOverlayVisible(id) {
   const el = $(id);
   return Boolean(el && !el.classList.contains("hidden"));
 }
 
 function closeTopmostOverlayLayer() {
+  // 0. Interactive help tooltip popover
+  if (isOverlayVisible("app-tooltip")) {
+    hideAppTooltip();
+    return true;
+  }
+
   // 1. Open custom select dropdowns
   const openSelects = document.querySelectorAll(".custom-select-wrapper.open");
   if (openSelects.length > 0) {
