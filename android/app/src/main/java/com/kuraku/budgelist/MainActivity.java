@@ -42,6 +42,7 @@ public class MainActivity extends BridgeActivity {
                         "localStorage.removeItem('budgelist-bundle-style-css');" +
                         "localStorage.removeItem('budgelist-bundle-body-html');" +
                         "localStorage.removeItem('budgelist-installed-bundle-key');" +
+                        "localStorage.removeItem('budgelist-installed-bundle-tag');" +
                         "localStorage.removeItem('budgelist-installed-bundle-channel');" +
                         "localStorage.removeItem('budgelist-installed-bundle-time');" +
                         "localStorage.removeItem('budgelist-skipped-ota-key');" +

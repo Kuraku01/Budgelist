@@ -1337,61 +1337,14 @@ async function attemptSilentSessionRecovery() {
   isRecoveringSession = true;
 
   try {
-    const keys = [];
-    for (let i = 0; i < localStorage.length; i++) {
+    for (let i = localStorage.length - 1; i >= 0; i--) {
       const k = localStorage.key(i);
       if (k && k.startsWith("budgelist-pending-email-change-")) {
-        keys.push(k);
-      }
-    }
-
-    if (keys.length === 0) return false;
-
-    for (const key of keys) {
-      const raw = safeGet(key);
-      if (!raw) continue;
-      let data = null;
-      try { data = JSON.parse(raw); } catch (e) {}
-      if (!data || !data.password) {
-        localStorage.removeItem(key);
-        continue;
-      }
-
-      if (data.timestamp && Date.now() - data.timestamp > 86400000) {
-        localStorage.removeItem(key);
-        continue;
-      }
-
-      if (data.newEmail) {
-        try {
-          const cred = await signInWithEmailAndPassword(auth, data.newEmail.toLowerCase(), data.password);
-          if (cred && cred.user) {
-            localStorage.removeItem(key);
-            await syncEmailAcrossFirestore(cred.user.uid, data.newEmail);
-            return true;
-          }
-        } catch (e1) {
-          console.log("Silent recovery with newEmail failed, trying oldEmail...", e1);
-        }
-      }
-
-      if (data.oldEmail) {
-        try {
-          const cred = await signInWithEmailAndPassword(auth, data.oldEmail.toLowerCase(), data.password);
-          if (cred && cred.user) {
-            if (cred.user.email && cred.user.email.toLowerCase() === data.newEmail.toLowerCase()) {
-              localStorage.removeItem(key);
-              await syncEmailAcrossFirestore(cred.user.uid, data.newEmail);
-            }
-            return true;
-          }
-        } catch (e2) {
-          console.log("Silent recovery with oldEmail failed:", e2);
-        }
+        localStorage.removeItem(k);
       }
     }
   } catch (err) {
-    console.error("Error during silent session recovery:", err);
+    console.error("Error cleaning up pending email state:", err);
   } finally {
     isRecoveringSession = false;
   }
@@ -1855,6 +1808,36 @@ let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
 let currentLatestTag = "";
 let pendingStartupUpdate = null;
 
+function sanitizeGitHubReleaseUrl(rawUrl, requireAssetDownload = false) {
+  if (!rawUrl || typeof rawUrl !== "string") return "";
+  try {
+    const parsed = new URL(rawUrl.trim());
+    if (parsed.protocol !== "https:") return "";
+    if (parsed.hostname.toLowerCase() !== "github.com") return "";
+    const lowerPath = parsed.pathname.toLowerCase();
+    const repoPrefix = `/${GITHUB_REPO.toLowerCase()}/releases`;
+    if (requireAssetDownload) {
+      if (!lowerPath.startsWith(`${repoPrefix}/download/`)) return "";
+    } else if (lowerPath !== repoPrefix && !lowerPath.startsWith(`${repoPrefix}/`)) {
+      return "";
+    }
+    return parsed.href;
+  } catch (e) {
+    return "";
+  }
+}
+
+function openExternalReleaseUrl(rawUrl) {
+  const fallbackUrl = `https://github.com/${GITHUB_REPO}/releases`;
+  const safeUrl = sanitizeGitHubReleaseUrl(rawUrl, false) || fallbackUrl;
+  const win = window.open(safeUrl, "_blank", "noopener,noreferrer");
+  if (win) {
+    try {
+      win.opener = null;
+    } catch (e) {}
+  }
+}
+
 function formatVersionTag(tag) {
   if (!tag) return `v${APP_VERSION.replace(/^v/i, "")}`;
   return tag.startsWith("v") ? tag : `v${tag}`;
@@ -2166,7 +2149,7 @@ if (downloadUpdateBtn) {
   downloadUpdateBtn.addEventListener("click", async () => {
     closeUpdateModal();
     if (!pendingStartupUpdate) {
-      window.open(updateDownloadUrl, "_blank");
+      openExternalReleaseUrl(updateDownloadUrl);
       return;
     }
     if (pendingStartupUpdate.type === "stable-ota" && pendingStartupUpdate.asset) {
@@ -2177,7 +2160,7 @@ if (downloadUpdateBtn) {
         pendingStartupUpdate.bundleKey
       );
     } else {
-      window.open(pendingStartupUpdate.downloadUrl || updateDownloadUrl, "_blank");
+      openExternalReleaseUrl(pendingStartupUpdate.downloadUrl || updateDownloadUrl);
     }
   });
 }
@@ -2317,7 +2300,7 @@ function showManualUpdateModal(info) {
       nativeBtn.textContent = "Download";
       nativeBtn.onclick = () => {
         closeUpdateModal();
-        window.open(info.apkAsset?.browser_download_url || info.releaseUrl, "_blank");
+        openExternalReleaseUrl(info.apkAsset?.browser_download_url || info.releaseUrl);
       };
     }
   } else {
@@ -3038,6 +3021,13 @@ let activeOtaCancelFn = null;
 async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable", bundleKey = "") {
   if (isOtaUpdating || !zipAsset || !zipAsset.browser_download_url) return false;
 
+  const safeAssetUrl = sanitizeGitHubReleaseUrl(zipAsset.browser_download_url, true);
+  if (!safeAssetUrl) {
+    console.warn("[OTA] Blocked untrusted OTA download URL:", zipAsset.browser_download_url);
+    showToast("Blocked untrusted update URL");
+    return false;
+  }
+
   if (!isSameOrNewerVersion(latestTag, NATIVE_APP_VERSION)) {
     showToast(`Update requires Android App ${formatVersionTag(latestTag)}`);
     return false;
@@ -3138,7 +3128,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
       }
     }, 400);
 
-    const res = await nativeFetch(zipAsset.browser_download_url, {
+    const res = await nativeFetch(safeAssetUrl, {
       signal: otaCancelController.signal,
       isBlob: true,
       timeoutMs: 45000,
@@ -3187,6 +3177,7 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
     if (statusDetail) statusDetail.textContent = "Unpacking update files...";
     if (progressBar) progressBar.style.width = "92%";
 
+    const MAX_OTA_ENTRY_CHARS = 4 * 1024 * 1024;
     const zip = await JSZip.loadAsync(blob);
     const updates = {};
 
@@ -3195,26 +3186,58 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
       const cleanName = filename.replace(/^.*?public\//, "").replace(/^.*?\//, "");
       if (cleanName === "app.js" || cleanName === "style.css" || cleanName === "index.html") {
         const content = await fileEntry.async("string");
+        if (content.length > MAX_OTA_ENTRY_CHARS) {
+          throw new Error(`Oversized OTA file (${cleanName})`);
+        }
         updates[cleanName] = content;
       }
     }
 
     if (skipped || runId !== otaUpdateRunSeq) return false;
 
-    if (updates["index.html"]) {
-      const match = updates["index.html"].match(/<body[^>]*>([\s\S]*)<\/body>/i);
-      if (match && match[1]) {
-        safeSet("budgelist-bundle-body-html", match[1].trim());
-      }
+    if (updates["app.js"]) {
+      // Pre-validate bundle syntax before mutating localStorage
+      new Function(updates["app.js"]);
     }
 
     if (updates["app.js"] || updates["style.css"] || updates["index.html"]) {
-      if (updates["app.js"]) safeSet("budgelist-bundle-app-js", updates["app.js"]);
-      if (updates["style.css"]) safeSet("budgelist-bundle-style-css", updates["style.css"]);
-      safeSet("budgelist-installed-bundle-key", resolvedKey);
-      safeSet("budgelist-installed-bundle-tag", latestTag);
-      safeSet("budgelist-installed-bundle-channel", channel);
-      safeSet("budgelist-installed-bundle-time", zipAsset.updated_at || new Date().toISOString());
+      const bundleKeys = [
+        "budgelist-bundle-body-html",
+        "budgelist-bundle-app-js",
+        "budgelist-bundle-style-css",
+        "budgelist-installed-bundle-key",
+        "budgelist-installed-bundle-tag",
+        "budgelist-installed-bundle-channel",
+        "budgelist-installed-bundle-time",
+      ];
+      const prevSnapshot = {};
+      bundleKeys.forEach((k) => {
+        prevSnapshot[k] = safeGet(k);
+      });
+
+      const writeChecks = [];
+      if (updates["index.html"]) {
+        const match = updates["index.html"].match(/<body[^>]*>([\s\S]*)<\/body>/i);
+        if (match && match[1]) {
+          writeChecks.push(safeSet("budgelist-bundle-body-html", match[1].trim()));
+        }
+      }
+      if (updates["app.js"]) writeChecks.push(safeSet("budgelist-bundle-app-js", updates["app.js"]));
+      if (updates["style.css"]) writeChecks.push(safeSet("budgelist-bundle-style-css", updates["style.css"]));
+      writeChecks.push(safeSet("budgelist-installed-bundle-key", resolvedKey));
+      writeChecks.push(safeSet("budgelist-installed-bundle-tag", latestTag));
+      writeChecks.push(safeSet("budgelist-installed-bundle-channel", channel));
+      writeChecks.push(safeSet("budgelist-installed-bundle-time", zipAsset.updated_at || new Date().toISOString()));
+
+      if (writeChecks.some((ok) => !ok)) {
+        bundleKeys.forEach((k) => {
+          try {
+            if (prevSnapshot[k] == null) localStorage.removeItem(k);
+            else localStorage.setItem(k, prevSnapshot[k]);
+          } catch (e) {}
+        });
+        throw new Error("Local storage quota exceeded while saving update");
+      }
 
       if (progressBar) progressBar.style.width = "100%";
       if (statusText) statusText.textContent = `${channelLabel} installed!`;
@@ -5084,6 +5107,13 @@ function showToast(message) {
 }
 
 // ---------- Export / share ----------
+function sanitizeCsvCell(val) {
+  const str = String(val == null ? "" : val);
+  // Neutralize CSV / spreadsheet formula injection (=, +, -, @, leading tab/CR)
+  const safeStr = /^[=+\-@\t\r]/.test(str) ? `'${str}` : str;
+  return `"${safeStr.replace(/"/g, '""')}"`;
+}
+
 async function exportCsvData() {
   const { monthExpenses } = currentMonthData();
   if (monthExpenses.length === 0) {
@@ -5091,9 +5121,15 @@ async function exportCsvData() {
     return;
   }
 
-  const rows = [["Date", "Category", "Note", "Amount"]];
-  monthExpenses.forEach((e) => rows.push([e.dateISO, e.category, e.note || "", e.amount.toFixed(2)]));
-  const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const rows = [['"Date","Category","Note","Amount"']];
+  monthExpenses.forEach((e) => {
+    const safeDate = `"${String(e.dateISO || "").replace(/"/g, '""')}"`;
+    const safeCat = sanitizeCsvCell(e.category || "");
+    const safeNote = sanitizeCsvCell(e.note || "");
+    const safeAmt = `"${(Number(e.amount) || 0).toFixed(2)}"`;
+    rows.push([safeDate, safeCat, safeNote, safeAmt].join(","));
+  });
+  const csv = rows.join("\n");
   const filename = `budgelist-${toLocalMonthPrefix(viewDate)}.csv`;
 
   // If running in Capacitor native Android app, use native Android bridge to save directly to Downloads
@@ -6687,30 +6723,35 @@ function drawChart(labels, actual, projected, budget) {
       else cur.push(`${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`);
     });
     if (cur.length > 1) segs.push(cur);
-    return segs.map((seg) => `<polyline points="${seg.join(" ")}" fill="none" stroke="${color}"
-      stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" ${dash ? `stroke-dasharray="${dash}"` : ""}></polyline>`).join("");
+    const safeColor = escapeHtml(color);
+    const safeDash = dash ? escapeHtml(dash) : "";
+    return segs.map((seg) => `<polyline points="${seg.join(" ")}" fill="none" stroke="${safeColor}"
+      stroke-width="2.75" stroke-linecap="round" stroke-linejoin="round" ${safeDash ? `stroke-dasharray="${safeDash}"` : ""}></polyline>`).join("");
   }
+
+  const safeLineColor = escapeHtml(lineColor);
+  const safeInkSoft = escapeHtml(inkSoft);
 
   const gridY = [0, 0.5, 1].map((f) => {
     const y = pad.top + innerH * (1 - f);
-    return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="${lineColor}" stroke-width="1"></line>`;
+    return `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="${safeLineColor}" stroke-width="1"></line>`;
   }).join("");
 
   let budgetLineSvg = "";
   if (budget && budget > 0 && budget <= maxY) {
     const bY = yAt(budget);
-    budgetLineSvg = `<line x1="${pad.left}" y1="${bY.toFixed(1)}" x2="${width - pad.right}" y2="${bY.toFixed(1)}" stroke="${lineColor}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"></line>`;
+    budgetLineSvg = `<line x1="${pad.left}" y1="${bY.toFixed(1)}" x2="${width - pad.right}" y2="${bY.toFixed(1)}" stroke="${safeLineColor}" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.75"></line>`;
   }
 
   const yLabels = [0, 0.5, 1].map((f) => {
     const y = pad.top + innerH * (1 - f);
-    return `<text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${escapeHtml(inkSoft)}" text-anchor="end" font-family="Inter, sans-serif">${escapeHtml(currencySymbol)}${Math.round(maxY * f)}</text>`;
+    return `<text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" font-size="9" fill="${safeInkSoft}" text-anchor="end" font-family="Inter, sans-serif">${escapeHtml(currencySymbol)}${Math.round(maxY * f)}</text>`;
   }).join("");
 
   const xTickDays = [1, Math.max(1, Math.round(n / 2)), n].filter((v, i, a) => a.indexOf(v) === i);
   const xLabels = xTickDays.map((d) => {
     const i = d - 1;
-    return `<text x="${xAt(i).toFixed(1)}" y="${height - 10}" font-size="9" fill="${inkSoft}" text-anchor="middle" font-family="Inter, sans-serif">${d}</text>`;
+    return `<text x="${xAt(i).toFixed(1)}" y="${height - 10}" font-size="9" fill="${safeInkSoft}" text-anchor="middle" font-family="Inter, sans-serif">${d}</text>`;
   }).join("");
 
   $("forecast-chart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" role="img" aria-label="Spending forecast over the month">
