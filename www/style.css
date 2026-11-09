@@ -1257,16 +1257,9 @@ select:focus {
 
 .expense-list li:last-child, .recurring-list li:last-child { border-bottom: none; }
 
-.expense-main, .recurring-main { display: flex; align-items: center; gap: 10px; }
-
 .cat-dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-.expense-text, .recurring-text { display: flex; flex-direction: column; }
-.expense-cat, .recurring-name { font-weight: 600; }
-.expense-note, .recurring-sub { color: var(--ink-soft); font-size: 12.5px; }
-
 .expense-amount, .recurring-amount { font-variant-numeric: tabular-nums; font-weight: 700; }
-.expense-date { color: var(--ink-soft); font-size: 12px; margin-right: 10px; }
 
 .recurring-delete {
   background: none; border: none; color: var(--ink-soft);
@@ -1274,6 +1267,7 @@ select:focus {
 }
 
 .empty { color: var(--ink-soft); font-size: 14px; text-align: center; padding: 10px 0; }
+
 
 /* ---------- FAB + sheets ---------- */
 .fab {
@@ -1749,41 +1743,6 @@ select:focus {
   border-color: var(--primary);
   background: color-mix(in srgb, var(--primary) 12%, transparent);
   transform: scale(1.05);
-}
-
-.settings-section h3 {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin: 0 0 10px;
-}
-
-.avatar-presets {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.avatar-chip {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  border: 2px solid var(--line);
-  background: var(--surface);
-  font-size: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: transform 0.15s ease, border-color 0.15s ease;
-}
-
-.avatar-chip.active {
-  border-color: var(--primary);
-  transform: scale(1.1);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent);
 }
 
 .readonly-input {
@@ -2335,7 +2294,6 @@ select {
   border-color: var(--caution);
 }
 
-.unrestricted-notice,
 .past-month-notice {
   display: flex;
   align-items: center;

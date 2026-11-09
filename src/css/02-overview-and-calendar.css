@@ -1,0 +1,647 @@
+/* ---------- Spending & Budget Summary Card ---------- */
+.summary-card {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 15px;
+  margin-bottom: 16px;
+}
+
+.summary-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.summary-card-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-soft);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.summary-stat {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 9px 6px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.summary-stat.interactive {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+}
+
+.summary-stat.interactive:hover,
+.summary-stat.interactive:active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 6%, var(--bg));
+}
+
+.summary-stat.interactive:active {
+  transform: scale(0.98);
+}
+
+.summary-stat-label-row,
+.metric-label-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  max-width: 100%;
+  margin-bottom: 2px;
+}
+
+.summary-stat-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-soft);
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-stat-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-stat-sub {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.summary-stat-value.primary { color: var(--primary); }
+.summary-stat-value.warn { color: var(--warn); }
+.summary-stat-value.caution { color: var(--caution); }
+.summary-stat-value.safe { color: var(--success); }
+
+/* ---------- Interactive Calendar Engine ---------- */
+.month-label-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.month-label-btn:hover, .month-label-btn:active {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.month-label-btn.filtered {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--primary);
+}
+
+.calendar-reset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: none;
+  margin-left: 6px;
+}
+
+/* Calendar Popover */
+.calendar-popover {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.12);
+  transform-origin: top center;
+  will-change: transform, opacity;
+}
+
+.calendar-popover.opening {
+  animation: calendarPopIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.calendar-popover.closing {
+  animation: calendarPopOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+@keyframes calendarPopIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes calendarPopOut {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+}
+
+.calendar-popover-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.calendar-month-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.calendar-grid-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+}
+
+.calendar-grid-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day-cell {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 50%;
+  cursor: pointer;
+  color: var(--ink);
+  position: relative;
+  transition: background 0.2s ease, transform 0.15s cubic-bezier(0.2, 0.8, 0.4, 1.2), color 0.2s ease, border-color 0.2s ease;
+  background: transparent;
+  border: none;
+}
+
+.calendar-grid-days.animate-enter .calendar-day-cell {
+  animation: dayCellEnter 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes dayCellEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.calendar-day-cell:hover {
+  background: var(--bg);
+  transform: scale(1.08);
+}
+
+.calendar-day-cell:active {
+  transform: scale(0.92);
+}
+
+.calendar-day-cell.other-month {
+  opacity: 0.35;
+  background: rgba(0, 0, 0, 0.2) !important;
+  color: var(--ink-soft) !important;
+}
+
+/* Specific Day Filter Banner */
+.day-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--primary);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  animation: bannerSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.day-filter-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.day-filter-info svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.day-filter-info strong {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+@keyframes bannerSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.calendar-day-cell.today {
+  border: 1.5px solid var(--primary);
+  color: var(--primary);
+  animation: todayGlow 2.5s infinite ease-in-out, dayCellEnter 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes todayGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0);
+  }
+}
+
+.calendar-day-cell.selected {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  animation: cellSelectPulse 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes cellSelectPulse {
+  0% {
+    transform: scale(0.85);
+  }
+  50% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.calendar-day-cell.has-expenses::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  background: var(--primary);
+  border-radius: 50%;
+  position: absolute;
+  bottom: 3px;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.calendar-day-cell:hover.has-expenses::after {
+  transform: scale(1.3);
+}
+
+.calendar-day-cell.selected.has-expenses::after {
+  background: #ffffff;
+}
+
+/* ---------- Spent Progress Bar with Marker & End Labels ---------- */
+.budget-progress-wrap {
+  margin-top: 2px;
+  padding-top: 2px;
+}
+
+.budget-progress-callout-track {
+  position: relative;
+  width: 100%;
+  height: 22px;
+  margin-bottom: 5px;
+}
+
+.budget-progress-spent-tag {
+  position: absolute;
+  top: 0;
+  left: 0%;
+  transform: translateX(0%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--primary) 13%, var(--bg));
+  color: var(--primary);
+  border: 1px solid color-mix(in srgb, var(--primary) 32%, transparent);
+  transition: left 0.3s ease, transform 0.3s ease, background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+.budget-progress-spent-tag.caution {
+  background: var(--caution-bg);
+  color: var(--caution-ink);
+  border-color: color-mix(in srgb, var(--caution) 45%, transparent);
+}
+
+.budget-progress-spent-tag.over {
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+
+.budget-progress-spent-tag.neutral {
+  background: var(--bg);
+  color: var(--ink-soft);
+  border-color: var(--line);
+}
+
+.budget-progress-bar-box {
+  position: relative;
+  width: 100%;
+  height: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.budget-progress-track {
+  width: 100%;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.budget-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--primary);
+  border-radius: 999px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.budget-progress-fill.caution {
+  background: var(--caution);
+}
+
+.budget-progress-fill.over {
+  background: var(--warn);
+}
+
+.budget-progress-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 3px;
+  left: clamp(1.5px, var(--spent-pct, 0%), calc(100% - 1.5px));
+  transform: translateX(-50%);
+  background: var(--primary);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1.5px var(--surface), 0 1px 3px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  z-index: 2;
+  transition: left 0.3s ease, background-color 0.3s ease;
+}
+
+.budget-progress-marker.caution {
+  background: var(--caution);
+}
+
+.budget-progress-marker.over {
+  background: var(--warn);
+}
+
+.budget-progress-marker.neutral {
+  background: var(--ink-soft);
+}
+
+.budget-progress-ends {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.budget-progress-end-val {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.panel h2 { font-size: 16px; font-weight: 700; }
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.note { font-size: 13px; color: var(--ink-soft); margin: 10px 0 0; }
+
+/* ---------- Sort select + chart type toggle ---------- */
+.mini-select {
+  width: auto;
+  padding: 6px 32px 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 999px;
+  background-position: right 10px center;
+  color: var(--ink-soft);
+}
+
+.chart-toggle { display: flex; gap: 8px; margin-bottom: 14px; }
+
+.chip-btn {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-btn.active { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+
+/* ---------- Categories ---------- */
+.category-list { display: flex; flex-direction: column; gap: 11px; margin-top: 14px; }
+
+.category-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+
+.category-row .cat-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+}
+
+.category-row .cat-name { width: 66px; flex-shrink: 0; font-weight: 500; }
+
+.category-row .cat-bar-track {
+  flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;
+}
+
+.category-row .cat-bar-fill { display: block; height: 100%; border-radius: 4px; transition: width 0.35s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.3s ease; }
+
+.category-row .cat-amount {
+  width: 58px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600;
+}
+
+.category-row .cat-percent {
+  width: 34px; text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; color: var(--ink-soft);
+}
+
+.chart-area { width: 100%; display: flex; justify-content: center; }
+.chart-area svg { max-width: 100%; }
+.chart-legend { display: flex; justify-content: center; gap: 18px; margin-top: 6px; font-size: 12px; color: var(--ink-soft); }
+.chart-legend .legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend-dot-dash { border-radius: 2px; }
+.legend-dot-line { width: 12px; height: 3px; border-radius: 1px; display: inline-block; }
+
+/* ---------- Forecast Metric Cards ---------- */
+.forecast-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metric-card {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.metric-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--ink-soft);
+  margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.metric-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-value.caution { color: var(--caution); }
+.metric-value.warn { color: var(--warn); }
+.metric-value.safe { color: var(--success); }
+
+/* ---------- Expense / recurring lists ---------- */
+.expense-list, .recurring-list { list-style: none; margin: 0; padding: 0; }
+
+.expense-list li, .recurring-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.expense-list li:last-child, .recurring-list li:last-child { border-bottom: none; }
+
+.cat-dot-sm { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.expense-amount, .recurring-amount { font-variant-numeric: tabular-nums; font-weight: 700; }
+
+.recurring-delete {
+  background: none; border: none; color: var(--ink-soft);
+  font-size: 18px; cursor: pointer; padding: 4px 6px;
+}
+
+.empty { color: var(--ink-soft); font-size: 14px; text-align: center; padding: 10px 0; }
+

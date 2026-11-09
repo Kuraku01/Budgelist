@@ -1,0 +1,2302 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' data: gap: https://ssl.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' data: https://apis.google.com https://*.googleapis.com https://*.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https: wss:; frame-src 'self' https://*.firebaseapp.com https://*.firebaseio.com https://apis.google.com; worker-src 'self' blob:;"
+    />
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=" />
+    <title>Budgelist</title>
+    <script>
+      // Clear stale web bundle if native APK/app build changed (must run before OTA CSS injection)
+      (function checkBundleValidity() {
+        var NATIVE_BUILD_KEY = "v0.2.1-beta";
+        try {
+          if (window.AndroidBridge && typeof window.AndroidBridge.getNativeBuildSignature === "function") {
+            NATIVE_BUILD_KEY = window.AndroidBridge.getNativeBuildSignature() || NATIVE_BUILD_KEY;
+          }
+          var currentBuildKey = localStorage.getItem("budgelist-native-build-key");
+          if (currentBuildKey !== NATIVE_BUILD_KEY) {
+            console.log("[OTA] New native build detected (" + currentBuildKey + " -> " + NATIVE_BUILD_KEY + "). Purging cached web bundle.");
+            localStorage.removeItem("budgelist-bundle-app-js");
+            localStorage.removeItem("budgelist-bundle-style-css");
+            localStorage.removeItem("budgelist-bundle-body-html");
+            localStorage.removeItem("budgelist-installed-bundle-key");
+            localStorage.removeItem("budgelist-installed-bundle-tag");
+            localStorage.removeItem("budgelist-installed-bundle-channel");
+            localStorage.removeItem("budgelist-installed-bundle-time");
+            localStorage.removeItem("budgelist-skipped-ota-key");
+            localStorage.setItem("budgelist-native-build-key", NATIVE_BUILD_KEY);
+          }
+        } catch (e) {}
+      })();
+
+      // Apply saved theme before paint to avoid a flash of the wrong theme.
+      try {
+        var t = localStorage.getItem("budgelist-theme");
+        if (t) document.documentElement.setAttribute("data-theme", t);
+        var ct = localStorage.getItem("budgelist-color-theme");
+        if (ct) document.documentElement.setAttribute("data-color-theme", ct);
+      } catch (e) {}
+
+      // Apply live OTA CSS bundle override if present
+      try {
+        var otaCss = localStorage.getItem("budgelist-bundle-style-css");
+        if (otaCss) {
+          var styleEl = document.createElement("style");
+          styleEl.id = "ota-live-styles";
+          styleEl.textContent = otaCss;
+          document.head.appendChild(styleEl);
+        }
+      } catch (e) {}
+    </script>
+    <script type="module">
+      import { firebaseConfig } from "./firebase-config.js";
+      import { initializeApp } from "./lib/firebase/firebase-app.js";
+      import {
+        getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+        signOut, onAuthStateChanged, sendEmailVerification, sendPasswordResetEmail,
+        EmailAuthProvider, reauthenticateWithCredential, updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+        setPersistence, browserLocalPersistence,
+      } from "./lib/firebase/firebase-auth.js";
+      import {
+        getFirestore, doc, getDoc, setDoc, collection, addDoc, updateDoc,
+        deleteDoc, getDocs, query, orderBy, writeBatch,
+      } from "./lib/firebase/firebase-firestore.js";
+
+      window.__FIREBASE__ = {
+        firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
+        signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
+        sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
+        updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
+        setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
+        collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+      };
+
+      window.firebaseConfig = firebaseConfig;
+      window.initializeApp = initializeApp;
+      window.getAuth = getAuth;
+      window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
+      window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+      window.signOut = signOut;
+      window.onAuthStateChanged = onAuthStateChanged;
+      window.sendEmailVerification = sendEmailVerification;
+      window.sendPasswordResetEmail = sendPasswordResetEmail;
+      window.EmailAuthProvider = EmailAuthProvider;
+      window.reauthenticateWithCredential = reauthenticateWithCredential;
+      window.updatePassword = updatePassword;
+      window.verifyBeforeUpdateEmail = verifyBeforeUpdateEmail;
+      window.updateProfile = updateProfile;
+      window.updateEmail = updateEmail;
+      window.setPersistence = setPersistence;
+      window.browserLocalPersistence = browserLocalPersistence;
+      window.getFirestore = getFirestore;
+      window.doc = doc;
+      window.getDoc = getDoc;
+      window.setDoc = setDoc;
+      window.collection = collection;
+      window.addDoc = addDoc;
+      window.updateDoc = updateDoc;
+      window.deleteDoc = deleteDoc;
+      window.getDocs = getDocs;
+      window.query = query;
+      window.orderBy = orderBy;
+      window.writeBatch = writeBatch;
+
+      if (typeof window.bootApp === "function") {
+        window.bootApp();
+      }
+    </script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="style.css" />
+    <script src="lib/jszip.min.js"></script>
+  </head>
+  <body>
+    <!-- LOADING SCREEN -->
+    <section id="loading-screen" class="screen">
+      <div class="loading-card">
+        <div class="loading-logo-wrap">
+          <svg
+            width="40"
+            height="40"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
+            <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
+            <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
+          </svg>
+        </div>
+        <h1 class="brand loading-brand">Budgelist</h1>
+        <div class="loading-spinner"></div>
+        <p id="loading-status-text" class="loading-status">Loading session...</p>
+        <div id="ota-progress-wrap" class="ota-progress-wrap hidden">
+          <div id="ota-progress-bar" class="ota-progress-bar" style="width: 0%;"></div>
+        </div>
+        <p id="ota-status-detail" class="ota-status-detail hidden" style="font-size: 13px; color: var(--ink-soft); margin-top: 8px; text-align: center;"></p>
+        <button type="button" id="ota-skip-btn" class="btn-ghost ota-cancel-btn hidden">
+          Cancel Update
+        </button>
+      </div>
+    </section>
+
+    <!-- AUTH SCREEN -->
+    <section id="auth-screen" class="screen hidden">
+      <div class="auth-card">
+        <p class="brand">Budgelist</p>
+        <h1 id="auth-title">Budget, listed.</h1>
+        <p id="auth-sub" class="sub">
+          Log spending, catch recurring bills, and see where the month is headed
+          before it's over.
+        </p>
+
+        <form id="auth-form">
+          <div id="username-field-wrap" class="hidden">
+            <label for="username">Username</label>
+            <input
+              type="text"
+              id="username"
+              autocomplete="username"
+              placeholder="e.g. alex"
+            />
+          </div>
+
+          <label for="auth-id" id="auth-id-label">Email or Username</label>
+          <input type="text" id="auth-id" required autocomplete="username" />
+
+          <div class="auth-password-label-wrap">
+            <label for="password">Password</label>
+            <button
+              type="button"
+              id="login-forgot-password-btn"
+              class="link-btn"
+            >
+              Forgot password?
+            </button>
+          </div>
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="password"
+              required
+              autocomplete="current-password"
+              minlength="6"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+
+          <p id="auth-error" class="error"></p>
+          <div class="auth-actions">
+            <button type="submit" id="main-auth-btn" class="btn-primary">
+              Log in
+            </button>
+            <button type="button" id="toggle-auth-mode-btn" class="btn-ghost">
+              Create account
+            </button>
+          </div>
+        </form>
+
+        <div class="auth-divider"><span>or</span></div>
+        <button
+          type="button"
+          id="guest-btn"
+          class="btn-ghost"
+          style="width: 100%"
+        >
+          Continue as Guest
+        </button>
+      </div>
+    </section>
+
+    <!-- GUEST WARNING MODAL -->
+    <div
+      id="guest-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2>Continue as Guest?</h2>
+        <p>
+          Guest data is saved locally on this device only and will be
+          permanently lost if you clear app data or uninstall the app.
+        </p>
+        <div class="modal-actions">
+          <button type="button" id="cancel-guest" class="btn-ghost">
+            Cancel
+          </button>
+          <button type="button" id="confirm-guest" class="btn-primary">
+            Continue as Guest
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- NETWORK OFFLINE MODAL -->
+    <div
+      id="network-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2 id="network-modal-title">No Internet Connection</h2>
+        <p id="network-modal-msg">
+          You need an active internet connection to log in or sync with the
+          cloud. Guest mode is accessible offline.
+        </p>
+        <div class="modal-actions">
+          <button type="button" id="cancel-network" class="btn-ghost">
+            Cancel
+          </button>
+          <button type="button" id="retry-network" class="btn-primary">
+            Retry
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPDATE AVAILABLE / UPDATE CENTER MODAL -->
+    <div
+      id="update-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card update-modal-card">
+        <div class="update-modal-head">
+          <h2 id="update-modal-title">Update Available</h2>
+          <div class="update-modal-head-actions">
+            <button
+              type="button"
+              id="refresh-update-modal-btn"
+              class="icon-btn update-modal-refresh hidden"
+              aria-label="Refresh update check"
+              title="Re-check for updates"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"/>
+              </svg>
+            </button>
+            <button
+              type="button"
+              id="close-update-modal-btn"
+              class="icon-btn update-modal-close hidden"
+              aria-label="Close update center"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+        <p id="update-modal-msg">A new version of Budgelist is available for download!</p>
+        <div id="update-checking-banner" class="update-checking-banner hidden" role="status" aria-live="polite">
+          <span class="update-checking-spinner" aria-hidden="true"></span>
+          <span id="update-checking-text">Checking update server...</span>
+        </div>
+
+        <!-- STARTUP CONFIRMATION VIEW (Native APK or Stable OTA Prompt) -->
+        <div id="update-startup-view">
+          <div class="update-version-info">
+            <div class="version-badge-wrap">
+              <span id="update-current-label" class="version-label">Current</span>
+              <span id="update-current-version" class="version-val">v0.2.1-beta</span>
+            </div>
+            <div class="version-arrow">→</div>
+            <div class="version-badge-wrap">
+              <span id="update-latest-label" class="version-label">Latest</span>
+              <span id="update-latest-version" class="version-val highlight">v0.2.1-beta</span>
+            </div>
+          </div>
+          <div id="update-startup-meta" class="update-startup-meta hidden"></div>
+          <div class="modal-actions">
+            <button type="button" id="cancel-update-btn" class="btn-ghost" style="flex: 1;">
+              Later
+            </button>
+            <button type="button" id="download-update-btn" class="btn-primary" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+              <span id="download-update-btn-text">Confirm Update</span>
+              <svg
+                id="download-update-ext-icon"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- MANUAL UPDATE CENTER VIEW (Android App + Stable Update + Testing / Beta) -->
+        <div id="update-manual-view" class="update-channel-list hidden">
+          <!-- 1. Android App (Full Install) -->
+          <div class="update-channel-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Android App</span>
+                  <span id="manual-native-badge" class="channel-badge native">Up to date</span>
+                </div>
+                <p id="manual-native-meta" class="update-channel-meta">Installed: v0.2.1-beta</p>
+              </div>
+              <button type="button" id="manual-native-btn" class="btn-primary update-channel-btn hidden">
+                Download
+              </button>
+            </div>
+          </div>
+
+          <!-- 2. Stable Update (In-App Package) -->
+          <div class="update-channel-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Stable Update</span>
+                  <span id="manual-stable-badge" class="channel-badge stable">Stable</span>
+                </div>
+                <p id="manual-stable-meta" class="update-channel-meta">Checking for updates...</p>
+              </div>
+              <button type="button" id="manual-stable-btn" class="btn-primary update-channel-btn">
+                Update
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Testing / Preview Update (In-App Package) -->
+          <div class="update-channel-card unstable-card">
+            <div class="update-channel-row">
+              <div class="update-channel-info">
+                <div class="update-channel-title-row">
+                  <span class="update-channel-name">Testing Build</span>
+                  <span id="manual-unstable-badge" class="channel-badge unstable">Preview</span>
+                </div>
+                <p id="manual-unstable-meta" class="update-channel-meta">Checking testing build...</p>
+              </div>
+              <button type="button" id="manual-unstable-btn" class="btn-ghost update-channel-btn unstable-btn">
+                Install
+              </button>
+            </div>
+          </div>
+
+          <button type="button" id="manual-revert-native-btn" class="btn-ghost update-revert-btn hidden">
+            Reset to Original App Version
+          </button>
+
+          <div class="modal-actions" style="margin-top: 4px;">
+            <button type="button" id="manual-close-btn" class="btn-ghost" style="width: 100%;">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- APP SCREEN -->
+    <section id="app-screen" class="screen hidden">
+      <!-- PULL TO REFRESH INDICATOR -->
+      <div id="pull-refresh-indicator" class="pull-refresh">
+        <div class="pull-refresh-content">
+          <svg
+            id="pull-refresh-spinner"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path
+              d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"
+            />
+          </svg>
+          <span id="pull-refresh-text">Pull to refresh</span>
+        </div>
+      </div>
+
+      <div
+        id="network-status-banner"
+        class="status-banner hidden offline"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="status-banner-content">
+          <svg
+            id="status-icon-offline"
+            class="status-icon"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <circle cx="12" cy="12" r="10" />
+            <path d="M15 9l-6 6M9 9l6 6" />
+          </svg>
+          <svg
+            id="status-icon-online"
+            class="status-icon hidden"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path d="M20 6L9 17l-5-5" />
+          </svg>
+          <span id="status-banner-text">Offline — changes saved locally</span>
+        </div>
+      </div>
+      <div id="verify-banner" class="verify-banner hidden">
+        <span>Please verify your email address.</span>
+        <button type="button" id="resend-verify-btn">Resend</button>
+      </div>
+      <header class="topbar">
+        <div
+          id="profile-widget"
+          class="profile-widget"
+          role="button"
+          aria-label="Profile settings"
+        >
+          <span id="profile-widget-avatar" class="profile-avatar">🦊</span>
+          <span id="profile-widget-name" class="profile-name">My Budget</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="sync-btn" class="icon-btn" aria-label="Sync data">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"
+              />
+            </svg>
+          </button>
+          <button
+            id="theme-toggle"
+            class="icon-btn"
+            aria-label="Toggle dark mode"
+          >
+            <svg
+              id="theme-icon-sun"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              />
+            </svg>
+            <svg
+              id="theme-icon-moon"
+              class="hidden"
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z" />
+            </svg>
+          </button>
+          <button id="settings-btn" class="icon-btn" aria-label="Settings">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="month-nav" class="month-nav">
+        <div class="month-nav-group">
+          <button id="prev-month" class="nav-arrow nav-arrow-month" type="button" aria-label="Previous month" title="Previous month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="11 17 6 12 11 7"></polyline>
+              <polyline points="18 17 13 12 18 7"></polyline>
+            </svg>
+          </button>
+          <button id="prev-day" class="nav-arrow nav-arrow-day" type="button" aria-label="Previous day" title="Previous day">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+        </div>
+        <div class="month-total-wrap">
+          <div class="month-label-row">
+            <button id="calendar-dropdown-btn" class="month-label-btn" type="button" aria-expanded="false" aria-label="Select date or month">
+              <span id="month-label">October 2026</span>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <button id="calendar-reset-btn" class="calendar-reset-chip hidden" type="button" title="Reset to today">
+              <span id="calendar-reset-text">✕ Today</span>
+            </button>
+          </div>
+          <h1 id="month-total" class="hidden">$0.00</h1>
+        </div>
+        <div class="month-nav-group">
+          <button id="next-day" class="nav-arrow nav-arrow-day" type="button" aria-label="Next day" title="Next day">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <button id="next-month" class="nav-arrow nav-arrow-month" type="button" aria-label="Next month" title="Next month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="13 17 18 12 13 7"></polyline>
+              <polyline points="6 17 11 12 6 7"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- CALENDAR POPOVER -->
+      <div id="calendar-popover" class="calendar-popover hidden">
+        <div class="calendar-popover-head">
+          <span id="calendar-month-title" class="calendar-month-title">October 2026</span>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <select id="calendar-month-select" class="mini-select" aria-label="Select month">
+              <option value="0">Jan</option>
+              <option value="1">Feb</option>
+              <option value="2">Mar</option>
+              <option value="3">Apr</option>
+              <option value="4">May</option>
+              <option value="5">Jun</option>
+              <option value="6">Jul</option>
+              <option value="7">Aug</option>
+              <option value="8">Sep</option>
+              <option value="9">Oct</option>
+              <option value="10">Nov</option>
+              <option value="11">Dec</option>
+            </select>
+            <select id="calendar-year-select" class="mini-select" aria-label="Select year">
+              <option value="2020">2020</option>
+              <option value="2021">2021</option>
+              <option value="2022">2022</option>
+              <option value="2023">2023</option>
+              <option value="2024">2024</option>
+              <option value="2025">2025</option>
+              <option value="2026">2026</option>
+              <option value="2027">2027</option>
+              <option value="2028">2028</option>
+              <option value="2029">2029</option>
+              <option value="2030">2030</option>
+              <option value="2031">2031</option>
+              <option value="2032">2032</option>
+              <option value="2033">2033</option>
+              <option value="2034">2034</option>
+              <option value="2035">2035</option>
+            </select>
+          </div>
+        </div>
+        <div class="calendar-grid-weekdays">
+          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+        </div>
+        <div id="calendar-grid-days" class="calendar-grid-days"></div>
+      </div>
+
+      <!-- SPENDING & BUDGET SUMMARY CARD -->
+      <div id="summary-card" class="summary-card">
+        <div class="summary-card-head">
+          <div class="section-title-group">
+            <span class="summary-card-title" id="summary-card-title">Overview</span>
+            <button
+              type="button"
+              id="tip-overview"
+              class="help-tip-btn"
+              data-tip="Overview separates your money into two clear layers: your overall Budget Pool on top (where you add income or savings) and your selected month's spending & budget cap below."
+              aria-label="About Overview"
+            >?</button>
+          </div>
+        </div>
+
+        <!-- TIER 1: GLOBAL BUDGET POOL -->
+        <div id="global-budget-bar" class="global-budget-bar">
+          <div class="global-budget-left">
+            <div class="global-budget-label-row">
+              <span class="global-budget-label">Budget Pool</span>
+              <button
+                type="button"
+                id="tip-global-budget"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Your unallocated reserve of money. Add income or allowance here, then either set a monthly cap below or spend directly from this pool. Any unspent monthly budget automatically returns here when the month ends."
+                aria-label="About Budget Pool"
+              >?</button>
+            </div>
+            <div class="global-budget-val-row">
+              <span id="global-budget-value" class="global-budget-value">$0.00</span>
+              <span id="global-budget-sub" class="global-budget-sub">Available reserve</span>
+            </div>
+          </div>
+          <button id="open-global-budget-btn" class="global-budget-action-btn" type="button">
+            + Add / History
+          </button>
+        </div>
+
+        <!-- TIER 2: SELECTED MONTH SPENDING & CAP -->
+        <div id="monthly-overview-section" class="monthly-overview-section">
+          <div class="monthly-overview-head">
+            <div class="monthly-overview-title-wrap">
+              <span id="monthly-overview-title" class="monthly-overview-title">This Month</span>
+              <span id="monthly-mode-pill" class="monthly-mode-pill">Unrestricted</span>
+            </div>
+            <div class="monthly-overview-actions">
+              <button id="set-budget-btn" class="month-budget-pill-btn" type="button">Set month budget</button>
+              <button id="past-month-lock-btn" class="past-lock-chip hidden" type="button">Locked</button>
+              <button
+                type="button"
+                id="tip-past-lock"
+                class="help-tip-btn help-tip-xs hidden"
+                data-tip="Past months are settled and locked so historical records stay intact. Unlocking lets you edit past expenses without altering your current Budget Pool."
+                aria-label="About past month lock"
+              >?</button>
+            </div>
+          </div>
+
+          <div id="summary-grid" class="summary-grid">
+            <div id="summary-stat-spent" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-spent-label">Spent</span>
+                <button
+                  type="button"
+                  id="tip-summary-spent"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Total expenses logged across this entire month."
+                  aria-label="About Spent"
+                >?</button>
+              </span>
+              <span id="summary-spent" class="summary-stat-value">$0.00</span>
+              <span id="summary-spent-sub" class="summary-stat-sub">Logged total</span>
+            </div>
+            <div id="summary-stat-budget" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-budget-label">Month Budget</span>
+                <button
+                  type="button"
+                  id="tip-summary-budget"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Your spending limit for this month."
+                  aria-label="About Month Budget"
+                >?</button>
+              </span>
+              <span id="summary-budget" class="summary-stat-value primary">$0.00</span>
+              <span id="summary-budget-sub" class="summary-stat-sub">Tap to set</span>
+            </div>
+            <div id="summary-stat-remaining" class="summary-stat">
+              <span class="summary-stat-label-row">
+                <span class="summary-stat-label" id="summary-remaining-label">Remaining</span>
+                <button
+                  type="button"
+                  id="tip-summary-remaining"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="How much budget you still have left to spend this month."
+                  aria-label="About Remaining"
+                >?</button>
+              </span>
+              <span id="summary-remaining" class="summary-stat-value safe">$0.00</span>
+              <span id="summary-remaining-sub" class="summary-stat-sub">Left to spend</span>
+            </div>
+          </div>
+
+          <div id="budget-progress-wrap" class="budget-progress-wrap">
+            <div class="budget-progress-callout-track">
+              <div id="budget-progress-spent-tag" class="budget-progress-spent-tag">
+                Spent: $0.00 (0%)
+              </div>
+            </div>
+            <div class="budget-progress-bar-box">
+              <div id="budget-progress-track" class="budget-progress-track">
+                <div id="budget-progress-fill" class="budget-progress-fill"></div>
+              </div>
+              <div id="budget-progress-marker" class="budget-progress-marker" aria-hidden="true"></div>
+            </div>
+            <div class="budget-progress-ends">
+              <span id="budget-progress-start-label" class="budget-progress-end-val">$0.00</span>
+              <span id="budget-progress-end-label" class="budget-progress-end-val">$0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="past-month-notice" class="past-month-notice hidden">
+        <span id="past-month-notice-text"></span>
+        <button type="button" id="past-month-notice-btn" class="link-btn" style="font-size: 12px; font-weight: 700; white-space: nowrap;">Unlock</button>
+      </div>
+
+      <div id="budget-warning" class="warning hidden">
+        <span id="budget-warning-text"></span>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="section-title-group">
+            <h2>Analytics &amp; Forecast</h2>
+            <button
+              type="button"
+              id="tip-forecast-panel"
+              class="help-tip-btn"
+              data-tip="Predicts your month-end spending by combining your daily spending habits with upcoming unpaid recurring bills."
+              aria-label="About Analytics and Forecast"
+            >?</button>
+          </div>
+        </div>
+        <div id="forecast-metrics" class="forecast-metrics hidden">
+          <div id="metric-card-projected" class="metric-card">
+            <span class="metric-label-row">
+              <span class="metric-label">Projected</span>
+              <button
+                type="button"
+                id="tip-metric-projected"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Estimated total by the end of the month based on what you've spent so far, your daily variable pace, and upcoming unpaid recurring bills."
+                aria-label="About Projected"
+              >?</button>
+            </span>
+            <span id="metric-projected" class="metric-value">$0.00</span>
+          </div>
+          <div id="metric-card-pace" class="metric-card">
+            <span class="metric-label-row">
+              <span class="metric-label" id="metric-pace-label">Daily Pace</span>
+              <button
+                type="button"
+                id="tip-metric-pace"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Your blended daily spending rate on day-to-day items (excludes fixed recurring bills), weighted between prior months and this month."
+                aria-label="About Daily Pace"
+              >?</button>
+            </span>
+            <span id="metric-pace" class="metric-value">$0.00</span>
+          </div>
+          <div id="metric-card-allowance" class="metric-card">
+            <span class="metric-label-row">
+              <span class="metric-label">Safe Daily</span>
+              <button
+                type="button"
+                id="tip-metric-allowance"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Recommended daily limit for non-bill spending over the rest of the month to finish within budget after setting aside upcoming recurring bills."
+                aria-label="About Safe Daily"
+              >?</button>
+            </span>
+            <span id="metric-allowance" class="metric-value">$0.00</span>
+          </div>
+        </div>
+        <div id="forecast-chart" class="chart-area"></div>
+        <div id="forecast-legend" class="chart-legend hidden">
+          <span class="legend-item"
+            ><span class="legend-dot" id="legend-dot-spent"></span>Spent</span
+          >
+          <span class="legend-item"
+            ><span
+              class="legend-dot legend-dot-dash"
+              id="legend-dot-projected"
+            ></span
+            >Projected</span
+          >
+          <span class="legend-item hidden" id="legend-item-budget"
+            ><span
+              class="legend-dot-line"
+              id="legend-dot-budget"
+            ></span
+            >Budget</span
+          >
+        </div>
+        <p id="forecast-empty" class="empty hidden">
+          No expenses logged yet — add one to see your forecast.
+        </p>
+        <p id="forecast-note" class="note"></p>
+      </section>
+
+      <!-- SPECIFIC DAY FILTER BANNER -->
+      <div id="day-filter-banner" class="day-filter-banner hidden">
+        <div class="day-filter-info">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+            <line x1="16" y1="2" x2="16" y2="6"/>
+            <line x1="8" y1="2" x2="8" y2="6"/>
+            <line x1="3" y1="10" x2="21" y2="10"/>
+          </svg>
+          <span>Filtered by <strong id="day-filter-text">Thursday, Oct 15, 2026</strong></span>
+        </div>
+        <button id="clear-day-filter-btn" class="chip-btn" type="button">
+          Clear filter
+        </button>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div class="section-title-group">
+            <h2>By category</h2>
+            <button
+              type="button"
+              id="tip-category-panel"
+              class="help-tip-btn"
+              data-tip="Shows how your spending is split across categories for the selected month (or for a single day when a date filter is active)."
+              aria-label="About By category"
+            >?</button>
+          </div>
+          <select
+            id="category-sort"
+            class="mini-select"
+            aria-label="Sort categories"
+          >
+            <option value="default">Default</option>
+            <option value="alpha">A–Z</option>
+            <option value="amount">By expense</option>
+          </select>
+        </div>
+        <div class="chart-toggle" role="group" aria-label="Chart type">
+          <button type="button" class="chip-btn active" data-chart="pie">
+            Pie
+          </button>
+          <button type="button" class="chip-btn" data-chart="bar">Bar</button>
+        </div>
+        <div id="category-chart" class="chart-area"></div>
+        <p id="category-chart-empty" class="empty hidden">
+          No expenses yet this month.
+        </p>
+        <div id="category-list" class="category-list"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head panel-head-wrap">
+          <div class="section-title-group">
+            <h2>Recurring bills</h2>
+            <span id="recurring-count-badge" class="count-pill hidden">0</span>
+            <button
+              type="button"
+              id="tip-recurring-panel"
+              class="help-tip-btn"
+              data-tip="Fixed monthly subscriptions and bills. Each bill automatically logs an expense on its scheduled day when you open the app, and unpaid bills are factored into your monthly forecast."
+              aria-label="About Recurring bills"
+            >?</button>
+          </div>
+          <div class="panel-head-controls">
+            <div id="recurring-view-toggle" class="view-mode-toggle" role="group" aria-label="Recurring bills layout">
+              <button type="button" class="view-mode-btn active" data-rec-view="list" title="Detailed list" aria-label="Detailed list">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/></svg>
+              </button>
+              <button type="button" class="view-mode-btn" data-rec-view="compact" title="Compact list" aria-label="Compact list">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="5" x2="20" y2="5"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
+              </button>
+              <button type="button" class="view-mode-btn" data-rec-view="grid" title="Grid cards" aria-label="Grid cards">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+              </button>
+            </div>
+            <button id="add-recurring-btn" class="add-pill-btn" type="button">+ Add</button>
+          </div>
+        </div>
+        <div id="recurring-summary-bar" class="section-subbar hidden"></div>
+        <ul id="recurring-list" class="recurring-list"></ul>
+        <p id="recurring-empty" class="empty hidden">No recurring bills yet.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head panel-head-wrap">
+          <div class="section-title-group">
+            <h2>Expenses</h2>
+            <span id="expense-count-badge" class="count-pill hidden">0</span>
+            <button
+              type="button"
+              id="tip-expenses-panel"
+              class="help-tip-btn"
+              data-tip="Your logged expenses for the selected month or day. Switch between Grouped by Day, Compact, and Grid views, filter by category, or tap any entry to edit."
+              aria-label="About Expenses"
+            >?</button>
+          </div>
+          <div class="panel-head-controls">
+            <div id="expense-view-toggle" class="view-mode-toggle" role="group" aria-label="Expenses layout">
+              <button type="button" class="view-mode-btn active" data-exp-view="grouped" title="Grouped by day" aria-label="Grouped by day">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1.5"/><line x1="7" y1="14" x2="20" y2="14"/><line x1="7" y1="19" x2="20" y2="19"/><circle cx="4" cy="14" r="1" fill="currentColor"/><circle cx="4" cy="19" r="1" fill="currentColor"/></svg>
+              </button>
+              <button type="button" class="view-mode-btn" data-exp-view="compact" title="Compact list" aria-label="Compact list">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="5" x2="20" y2="5"/><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="4" y1="20" x2="20" y2="20"/></svg>
+              </button>
+              <button type="button" class="view-mode-btn" data-exp-view="grid" title="Grid cards" aria-label="Grid cards">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="expense-category-filter" class="expense-cat-filter hidden" role="group" aria-label="Filter expenses by category"></div>
+        <ul id="expense-list" class="expense-list"></ul>
+        <p id="empty-state" class="empty hidden">
+          Nothing logged for this month yet.
+        </p>
+      </section>
+    </section>
+
+    <!-- ADD/EDIT EXPENSE (floating) -->
+    <button id="add-btn" class="fab hidden" aria-label="Add expense">+</button>
+
+    <!-- ADD/EDIT EXPENSE SHEET -->
+    <div id="add-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="expense-sheet-title">Add expense</h2>
+        <form id="expense-form">
+          <label for="amount">Amount</label>
+          <input type="number" id="amount" step="0.01" min="0.01" required />
+
+          <label for="expense-date-trigger">Date</label>
+          <input type="hidden" id="expense-date" required />
+          <div id="expense-date-picker" class="expense-date-picker">
+            <button
+              type="button"
+              id="expense-date-trigger"
+              class="custom-select-trigger expense-date-trigger"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            >
+              <span class="custom-select-value">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  style="color: var(--primary); flex-shrink: 0;"
+                >
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span id="expense-date-trigger-text" class="custom-select-text">Today</span>
+              </span>
+              <svg class="custom-select-arrow" viewBox="0 0 24 24">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+
+            <div id="expense-date-popover" class="calendar-popover expense-date-popover hidden">
+              <div class="calendar-popover-head">
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <button type="button" id="exp-cal-prev" class="nav-arrow exp-cal-arrow" aria-label="Previous month">&lsaquo;</button>
+                  <button type="button" id="exp-cal-next" class="nav-arrow exp-cal-arrow" aria-label="Next month">&rsaquo;</button>
+                  <button type="button" id="exp-cal-today-btn" class="calendar-reset-chip" style="margin-left: 2px;">Today</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                  <select id="exp-cal-month-select" class="mini-select" aria-label="Select expense month">
+                    <option value="0">Jan</option>
+                    <option value="1">Feb</option>
+                    <option value="2">Mar</option>
+                    <option value="3">Apr</option>
+                    <option value="4">May</option>
+                    <option value="5">Jun</option>
+                    <option value="6">Jul</option>
+                    <option value="7">Aug</option>
+                    <option value="8">Sep</option>
+                    <option value="9">Oct</option>
+                    <option value="10">Nov</option>
+                    <option value="11">Dec</option>
+                  </select>
+                  <select id="exp-cal-year-select" class="mini-select" aria-label="Select expense year">
+                    <option value="2026">2026</option>
+                  </select>
+                </div>
+              </div>
+              <div class="calendar-grid-weekdays">
+                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+              </div>
+              <div id="expense-calendar-grid-days" class="calendar-grid-days"></div>
+            </div>
+          </div>
+
+          <label for="category">Category</label>
+          <select id="category">
+            <option>Food</option>
+            <option>Transport</option>
+            <option>Bills</option>
+            <option>Shopping</option>
+            <option>Health</option>
+            <option>Other</option>
+          </select>
+
+          <label for="note">Note (optional)</label>
+          <input
+            type="text"
+            id="note"
+            maxlength="60"
+            placeholder="e.g. groceries"
+          />
+
+          <div class="sheet-actions">
+            <button
+              type="button"
+              id="delete-expense-btn"
+              class="btn-danger hidden"
+            >
+              Delete
+            </button>
+            <button type="button" id="cancel-add" class="btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- RECURRING SHEET -->
+    <div id="recurring-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="recurring-sheet-title">Add recurring bill</h2>
+        <form id="recurring-form">
+          <label for="r-amount">Amount</label>
+          <input type="number" id="r-amount" step="0.01" min="0.01" required />
+
+          <label for="r-category">Category</label>
+          <select id="r-category">
+            <option>Bills</option>
+            <option>Food</option>
+            <option>Transport</option>
+            <option>Shopping</option>
+            <option>Health</option>
+            <option>Other</option>
+          </select>
+
+          <label for="r-note">Name</label>
+          <input
+            type="text"
+            id="r-note"
+            maxlength="40"
+            placeholder="e.g. Rent"
+            required
+          />
+
+          <div class="field-label-row">
+            <label for="r-day">Day of month charged</label>
+            <button
+              type="button"
+              id="tip-recurring-day"
+              class="help-tip-btn help-tip-xs"
+              data-tip="Limited to days 1–28 so recurring bills trigger reliably every single month, including February."
+              aria-label="About day of month charged"
+            >?</button>
+          </div>
+          <input type="number" id="r-day" min="1" max="28" value="1" required />
+
+          <div class="sheet-actions">
+            <button
+              type="button"
+              id="delete-recurring-btn"
+              class="btn-danger hidden"
+            >
+              Delete
+            </button>
+            <button type="button" id="cancel-recurring" class="btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- MONTH BUDGET SHEET -->
+    <div id="budget-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="month-budget-sheet-title">Month budget</h2>
+        <p id="month-budget-pool-sub" class="sheet-sub">
+          Available in Budget: <strong id="month-sheet-global-avail">$0.00</strong>
+          &middot; Max: <strong id="month-sheet-max-alloc">$0.00</strong>
+          <span id="month-sheet-min-wrap" class="hidden">&middot; Min (spent): <strong id="month-sheet-min-alloc">$0.00</strong></span>
+        </p>
+        <form id="budget-form">
+          <label for="budget-input">Month budget amount</label>
+          <input type="number" id="budget-input" step="any" min="0" required />
+
+          <div class="budget-slider-section">
+            <div class="budget-slider-head">
+              <div class="section-title-group" style="gap: 5px;">
+                <label for="month-budget-slider" class="budget-slider-label" style="margin: 0;">Allocate from Budget Pool</label>
+                <button
+                  type="button"
+                  id="tip-month-allocate"
+                  class="help-tip-btn help-tip-xs"
+                  data-tip="Borrows money from your Budget Pool to set a spending cap for this month. You can't set it below what you've already spent, and any unspent balance automatically returns to your Budget Pool when the month ends."
+                  aria-label="About monthly budget allocation"
+                >?</button>
+              </div>
+              <span id="month-budget-slider-pct" class="budget-slider-pct">0%</span>
+            </div>
+            <div class="budget-slider-wrap">
+              <div class="budget-slider-track">
+                <div id="month-budget-slider-min-fill" class="budget-slider-min-fill"></div>
+                <div id="month-budget-slider-fill" class="budget-slider-fill"></div>
+              </div>
+              <div id="month-budget-slider-min-tick" class="budget-slider-min-tick hidden" title="Minimum required for expenses already spent"></div>
+              <input
+                type="range"
+                id="month-budget-slider"
+                class="budget-slider-input"
+                aria-label="Allocate from Budget"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+              />
+            </div>
+            <div class="budget-pct-chips">
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="25">25%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="50">50%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="75">75%</button>
+              <button type="button" class="chip-btn budget-pct-btn" data-pct="100">ALL</button>
+            </div>
+          </div>
+
+          <div id="month-budget-sheet-notice" class="sheet-inline-notice hidden"></div>
+
+          <div class="sheet-actions">
+            <button type="button" id="unrestrict-month-budget-btn" class="btn-ghost hidden" style="color: var(--warn);">
+              Unrestrict
+            </button>
+            <button type="button" id="cancel-budget" class="btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" id="save-month-budget-btn" class="btn-primary">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- GLOBAL BUDGET & HISTORY SHEET -->
+    <div id="global-budget-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <div class="settings-header" style="margin-bottom: 6px;">
+          <h2>Budget Pool</h2>
+          <button
+            type="button"
+            id="close-global-budget-btn"
+            class="icon-btn"
+            aria-label="Close budget sheet"
+          >
+            &times;
+          </button>
+        </div>
+        <div class="global-sheet-balance-card">
+          <div class="global-sheet-balance-left">
+            <div class="section-title-group" style="gap: 5px;">
+              <span class="global-sheet-balance-label">Available Unallocated Reserve</span>
+              <button
+                type="button"
+                id="tip-global-sheet-avail"
+                class="help-tip-btn help-tip-xs"
+                data-tip="Funds currently available in your reserve pool—not assigned to a monthly cap. You can also change or convert your active currency right from this card."
+                aria-label="About Available Unallocated Reserve"
+              >?</button>
+            </div>
+            <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+          </div>
+          <button
+            type="button"
+            id="currency-btn"
+            class="currency-pill-btn"
+            aria-label="Currency and conversion options"
+            title="Currency and conversion options"
+          >
+            <span id="global-currency-btn-label">USD ($)</span>
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.3"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M4 8h16M15 4l5 4-5 4" />
+              <path d="M20 16H4M9 12l-5 4 5 4" />
+            </svg>
+          </button>
+        </div>
+
+        <form id="global-budget-form" style="margin-bottom: 18px;">
+          <label for="global-budget-amount-input">Add to budget</label>
+          <input
+            type="number"
+            id="global-budget-amount-input"
+            step="any"
+            min="0.01"
+            placeholder="0.00"
+            required
+          />
+          <label for="global-budget-desc-input">Description (optional)</label>
+          <input
+            type="text"
+            id="global-budget-desc-input"
+            maxlength="60"
+            placeholder="e.g. Salary, Allowance, Freelance"
+          />
+          <div class="sheet-actions" style="margin-top: 12px;">
+            <button type="submit" class="btn-primary" style="width: 100%;">+ Add Budget</button>
+          </div>
+        </form>
+
+        <div class="budget-history-section">
+          <div class="budget-history-head">
+            <h3>Budget History</h3>
+            <button type="button" id="clear-budget-history-btn" class="link-btn hidden" style="color: var(--warn); font-size: 12px; font-weight: 700;">
+              Clear all
+            </button>
+          </div>
+
+          <div id="clear-budget-confirm-box" class="clear-budget-confirm-box hidden">
+            <p>How would you like to clear budget history?</p>
+            <div class="clear-budget-confirm-actions">
+              <button type="button" id="clear-history-log-only-btn" class="btn-ghost" style="font-size: 12px;">
+                Clear Log Only
+              </button>
+              <button type="button" id="clear-history-reset-all-btn" class="btn-danger" style="font-size: 12px;">
+                Reset Budget ($0) &amp; Clear
+              </button>
+              <button type="button" id="cancel-clear-history-btn" class="btn-ghost" style="font-size: 12px;">
+                Cancel
+              </button>
+            </div>
+          </div>
+
+          <ul id="budget-history-list" class="budget-history-list"></ul>
+          <p id="budget-history-empty" class="empty">No budget additions recorded yet.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- OVER-BUDGET RESOLUTION SHEET -->
+    <div id="overbudget-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="overbudget-sheet-title">Budget Exceeded</h2>
+        <div id="overbudget-sheet-desc" class="warning critical" style="margin-top: 10px; margin-bottom: 16px;"></div>
+        <div class="overbudget-actions">
+          <button type="button" id="overbudget-increase-month-btn" class="btn-primary">
+            Add to Month Budget
+          </button>
+          <button type="button" id="overbudget-deduct-global-btn" class="btn-ghost">
+            Instant Deduction from Budget
+          </button>
+          <button type="button" id="overbudget-force-save-btn" class="btn-danger hidden">
+            Use Available &amp; Log Over-Budget
+          </button>
+          <button type="button" id="overbudget-open-global-btn" class="btn-ghost">
+            + Add Funds to Budget First
+          </button>
+          <button type="button" id="overbudget-cancel-btn" class="btn-ghost">
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UNLOCK PAST MONTH SHEET -->
+    <div id="unlock-past-sheet" class="sheet hidden">
+      <div class="sheet-content">
+        <div class="sheet-handle"></div>
+        <h2 id="unlock-past-sheet-title">Unlock Past Month?</h2>
+        <p id="unlock-past-sheet-desc" class="sheet-sub" style="margin-top: 8px; line-height: 1.5;">
+          Past months are locked to protect your historical records. Unlocking lets you add, edit, or delete historical expenses for this month (updating its total spent and analytics), without affecting your current Budget.
+        </p>
+        <div class="sheet-actions">
+          <button type="button" id="cancel-unlock-past-btn" class="btn-ghost">Cancel</button>
+          <button type="button" id="confirm-unlock-past-btn" class="btn-primary">Unlock Month</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS SHEET -->
+    <div id="settings-sheet" class="sheet hidden">
+      <div class="sheet-content settings-content">
+        <div class="settings-header">
+          <h2>Settings</h2>
+          <button
+            type="button"
+            id="close-settings-btn"
+            class="icon-btn"
+            aria-label="Close settings"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="settings-body">
+          <!-- ACCORDION 1: PROFILE -->
+          <div class="accordion-item active">
+            <button type="button" class="accordion-header">
+              <span>Profile</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <label>Avatar</label>
+                <button
+                  type="button"
+                  id="open-avatar-modal-btn"
+                  class="btn-ghost style-btn-icon"
+                  style="
+                    width: 100%;
+                    justify-content: flex-start;
+                    gap: 12px;
+                    margin-bottom: 12px;
+                  "
+                >
+                  <span id="settings-avatar-preview" style="font-size: 24px"
+                    >🦊</span
+                  >
+                  <span>Change avatar</span>
+                </button>
+
+                <label for="settings-name">Name</label>
+                <input type="text" id="settings-name" placeholder="Your name" />
+
+                <label for="settings-email">Email bound</label>
+                <div class="password-row">
+                  <input
+                    type="email"
+                    id="settings-email"
+                    readonly
+                    class="readonly-input"
+                    placeholder="Guest account"
+                  />
+                  <button type="button" id="change-email-btn" class="btn-ghost">
+                    Change
+                  </button>
+                </div>
+
+                <label for="settings-password">Password</label>
+                <div class="password-row">
+                  <input
+                    type="password"
+                    id="settings-password"
+                    value="••••••••"
+                    readonly
+                    class="readonly-input"
+                  />
+                  <button
+                    type="button"
+                    id="change-password-btn"
+                    class="btn-ghost"
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 2: APPEARANCE -->
+          <div class="accordion-item">
+            <button type="button" class="accordion-header">
+              <span>Appearance</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <div class="settings-toggle-row">
+                  <span>Dark mode</span>
+                  <label class="switch">
+                    <input type="checkbox" id="settings-dark-toggle" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="theme-picker-section">
+                  <span class="setting-title" style="display: block; margin-bottom: 8px;">Color theme</span>
+                  <div id="theme-palette-grid" class="theme-palette-grid" role="radiogroup" aria-label="Color theme">
+                    <button type="button" class="theme-swatch-btn active" data-color-theme="violet" aria-label="Violet theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #6c4cf1 50%, #a58df8 50%);"></span>
+                      <span class="theme-swatch-label">Violet</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="emerald" aria-label="Emerald theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #0f9f6e 50%, #34d399 50%);"></span>
+                      <span class="theme-swatch-label">Emerald</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="ocean" aria-label="Ocean theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #2563eb 50%, #60a5fa 50%);"></span>
+                      <span class="theme-swatch-label">Ocean</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="rose" aria-label="Rose theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #e11d74 50%, #f472b6 50%);"></span>
+                      <span class="theme-swatch-label">Rose</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="sunset" aria-label="Sunset theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #ea580c 50%, #fb923c 50%);"></span>
+                      <span class="theme-swatch-label">Sunset</span>
+                    </button>
+                    <button type="button" class="theme-swatch-btn" data-color-theme="slate" aria-label="Slate theme">
+                      <span class="theme-swatch-dot" style="background: linear-gradient(135deg, #3b4b64 50%, #94a3b8 50%);"></span>
+                      <span class="theme-swatch-label">Slate</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 3: CURRENCY -->
+          <div class="accordion-item" id="settings-currency-accordion">
+            <button type="button" class="accordion-header">
+              <span>Currency</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <div class="settings-currency-status-row">
+                  <div class="section-title-group" style="gap: 5px;">
+                    <span class="setting-title">Active Currency</span>
+                    <button
+                      type="button"
+                      id="tip-settings-currency"
+                      class="help-tip-btn help-tip-xs"
+                      data-tip="Change Symbol only swaps the currency sign shown next to numbers (e.g. $10 → €10). Convert Currency recalculates all budgets, bills, and expenses using live exchange rates."
+                      aria-label="About Currency options"
+                    >?</button>
+                  </div>
+                  <span id="settings-active-currency-badge" class="channel-badge stable">USD ($)</span>
+                </div>
+                <div class="settings-currency-actions">
+                  <button
+                    type="button"
+                    id="settings-change-currency-btn"
+                    class="btn-ghost style-btn-icon"
+                  >
+                    Change Symbol
+                  </button>
+                  <button
+                    type="button"
+                    id="settings-convert-currency-btn"
+                    class="btn-primary style-btn-icon"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2.3"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M4 8h16M15 4l5 4-5 4" />
+                      <path d="M20 16H4M9 12l-5 4 5 4" />
+                    </svg>
+                    Convert
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 4: SYNC OPTIONS -->
+          <div class="accordion-item" id="settings-sync-accordion">
+            <button type="button" class="accordion-header">
+              <span>Sync Options</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <div class="settings-toggle-row">
+                  <div>
+                    <div class="section-title-group" style="gap: 5px;">
+                      <span class="setting-title">Auto Sync</span>
+                      <button
+                        type="button"
+                        id="tip-settings-autosync"
+                        class="help-tip-btn help-tip-xs"
+                        data-tip="Automatically backs up and syncs your changes to the cloud in the background when online. Turn off if you prefer syncing manually with the top-right sync button."
+                        aria-label="About Auto Sync"
+                      >?</button>
+                    </div>
+                    <p class="setting-desc">
+                      Sync changes automatically in background
+                    </p>
+                  </div>
+                  <label class="switch">
+                    <input
+                      type="checkbox"
+                      id="settings-auto-sync-toggle"
+                      checked
+                    />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 5: EXPORT -->
+          <div class="accordion-item">
+            <button type="button" class="accordion-header">
+              <span>Export</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <button
+                  type="button"
+                  id="export-csv-btn"
+                  class="btn-ghost style-btn-icon"
+                  style="width: 100%"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M12 3v12M7 10l5 5 5-5M5 21h14" />
+                  </svg>
+                  Export as CSV
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 6: ABOUT -->
+          <div class="accordion-item">
+            <button type="button" class="accordion-header">
+              <span>About</span>
+              <svg
+                class="accordion-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.5"
+              >
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+            <div class="accordion-content">
+              <div class="accordion-content-inner">
+                <div class="about-card">
+                  <div class="about-brand-row">
+                    <span class="brand">Budgelist</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                      <span id="about-package-channel-badge" class="channel-badge native">Built-in</span>
+                      <span id="about-version-badge" class="version-badge">v0.2.1-beta</span>
+                      <button
+                        type="button"
+                        id="tip-about-channel"
+                        class="help-tip-btn help-tip-xs"
+                        data-tip="Indicates your active build track: Built-in (original Android app), Live Update (stable in-app update), or Testing Build."
+                        aria-label="About version badge"
+                      >?</button>
+                    </div>
+                  </div>
+                  <p id="about-version-note" class="about-version-note hidden"></p>
+                  <p class="about-dev">Developed by <strong>Kuraku01</strong></p>
+
+                  <button
+                    type="button"
+                    id="check-update-btn"
+                    class="btn-ghost style-btn-icon"
+                    style="width: 100%; margin: 12px 0 16px"
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"
+                      />
+                    </svg>
+                    Check for updates
+                  </button>
+
+                  <div class="release-notes-wrap">
+                    <button
+                      type="button"
+                      id="toggle-release-notes"
+                      class="link-btn"
+                      style="
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        width: 100%;
+                      "
+                    >
+                      <span>What's New in v0.2.1-beta</span>
+                      <span id="release-notes-arrow">▸</span>
+                    </button>
+                    <div
+                      id="release-notes-content"
+                      class="release-notes-list hidden"
+                    >
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.1-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Redesigned Overview &amp; Spent Progress Bar:</strong> Clear separation between your Budget Pool and Monthly Spending, relocated Currency &amp; Month Budget controls, and an upgraded Spent bar with end-value labels and a live current-spent marker.
+                        </li>
+                        <li>
+                          <strong>Interactive Help Tooltips:</strong> Tap or hover <code>?</code> badges across Overview, Analytics, Bills, Budgets, and Settings for plain-language explanations.
+                        </li>
+                        <li>
+                          <strong>Multi-View Expenses &amp; Recurring Bills:</strong> Switch between Grouped-by-Day/Detailed, Compact, and Grid layouts, filter expenses by category, and step day-by-day or month-by-month from the top bar.
+                        </li>
+                        <li>
+                          <strong>Multi-Layer Android Back Navigation &amp; Logout Confirmation:</strong> Back gestures close active popovers, modals, and sheets layer by layer, with confirmation before logging out.
+                        </li>
+                        <li>
+                          <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, responsive slow-network progress &amp; instant cancel, and automatic cleanup on app upgrades.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.2.0-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Two-Tier Global &amp; Monthly Budget System:</strong> Manage an overall Budget pool with a detailed addition history log, and lend monthly budgets using a synchronized input, smooth slider, and preset chips.
+                        </li>
+                        <li>
+                          <strong>Automatic Past-Month Settlement &amp; Lock:</strong> Unspent monthly budget automatically returns once to your Budget when a month ends, while past months lock to preserve historical records.
+                        </li>
+                        <li>
+                          <strong>Interactive Calendar &amp; Custom Date Picker:</strong> Full month/year dropdowns with auto-expanding year ranges (1970–+50 yrs), day-level filtering, and a custom dropdown calendar in the Add Expense sheet.
+                        </li>
+                        <li>
+                          <strong>Color Themes &amp; UI Polish:</strong> Choose from 6 color themes (Violet, Emerald, Ocean, Rose, Sunset, Slate) in Light or Dark mode, plus tactile 3D FAB depth and app-wide text selection prevention.
+                        </li>
+                        <li>
+                          <strong>Universal Live OTA Engine &amp; Security Hardening:</strong> Full HTML/CSS/JS over-the-air updates, upgraded Capacitor 8.6.0 &amp; AGP 9.5.0, and hardened CSV export validation.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.2-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Upgraded Forecast Algorithm:</strong> Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines.
+                        </li>
+                        <li>
+                          <strong>Safe Daily Spend Target:</strong> Real-time daily variable spend allowance to keep your budget on track.
+                        </li>
+                        <li>
+                          <strong>Multi-Tier Budget Warnings:</strong> Intelligent alerts for critical over-budget spending, near-budget caution, and on-track status.
+                        </li>
+                        <li>
+                          <strong>Budget Reference Line:</strong> Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
+                        </li>
+                        <li>
+                          <strong>Seamless In-App Updates:</strong> Get the latest features and bug fixes automatically when opening the app.
+                        </li>
+                        <li>
+                          <strong>Update Progress Indicator:</strong> See real-time download and installation progress directly on the startup screen.
+                        </li>
+                        <li>
+                          <strong>Password Toggle:</strong> Tap the eye icon on password fields to view or hide what you type.
+                        </li>
+                        <li>
+                          <strong>Performance & Security Improvements:</strong> Enhanced stability, smoother list rendering, and upgraded data protection.
+                        </li>
+                      </ul>
+
+                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.0-beta</h4>
+                      <ul>
+                        <li>
+                          <strong>Local-First Offline Mode:</strong> Instant 0ms app open & local expense logging.
+                        </li>
+                        <li>
+                          <strong>Cloud Sync & Pull-to-Refresh:</strong> Background and pull-down gestures to sync across devices.
+                        </li>
+                        <li>
+                          <strong>Guest Mode:</strong> Instant offline guest access without registration.
+                        </li>
+                        <li>
+                          <strong>Username & Email Auth:</strong> Sign up with a unique username and log in via email or username.
+                        </li>
+                        <li>
+                          <strong>Realtime Network Status:</strong> Floating network status pill indicating connection state.
+                        </li>
+                        <li>
+                          <strong>Compact Settings:</strong> Collapsible categories, avatar presets, and about section.
+                        </li>
+                        <li>
+                          <strong>CSV Export:</strong> Direct CSV export to your Downloads folder.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ACCORDION 7: ACCOUNT ACTIONS -->
+          <div class="accordion-item" style="border: none; padding-top: 10px">
+            <button
+              type="button"
+              id="logout-btn"
+              class="btn-danger style-btn-icon"
+              style="width: 100%"
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"
+                />
+              </svg>
+              Log out
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOGOUT CONFIRMATION MODAL -->
+    <div
+      id="logout-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2 id="logout-modal-title">Log out?</h2>
+        <p id="logout-modal-msg">
+          Are you sure you want to log out of your account on this device?
+        </p>
+        <div class="modal-actions">
+          <button type="button" id="cancel-logout-btn" class="btn-ghost">
+            Cancel
+          </button>
+          <button type="button" id="confirm-logout-btn" class="btn-danger" style="flex: 1;">
+            Log out
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSWORD MODAL -->
+    <div
+      id="password-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2>Change password</h2>
+        <form id="password-form">
+          <label for="old-password">Current password</label>
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="old-password"
+              required
+              autocomplete="current-password"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="old-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          <label for="new-password">New password (6+ chars)</label>
+          <div class="password-input-wrap">
+            <input
+              type="password"
+              id="new-password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+            />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="new-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          <p id="password-error" class="error"></p>
+          <div style="margin-top: 6px; margin-bottom: 12px">
+            <button type="button" id="forgot-password-link" class="link-btn">
+              Forgot password?
+            </button>
+          </div>
+          <div class="modal-actions">
+            <button type="button" id="cancel-password" class="btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- EMAIL MODAL -->
+    <div
+      id="email-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2>Change email</h2>
+        <form id="email-form">
+          <label for="new-email">New email address</label>
+          <input type="email" id="new-email" required autocomplete="email" />
+          <label for="email-password">Current password (required)</label>
+          <div class="password-input-wrap">
+            <input type="password" id="email-password" required autocomplete="current-password" />
+            <button
+              type="button"
+              class="password-toggle-btn"
+              data-target="email-password"
+              aria-label="Toggle password visibility"
+            >
+              <svg
+                class="eye-icon"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg
+                class="eye-off-icon hidden"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+          <p id="email-error" class="error"></p>
+          <div class="modal-actions">
+            <button type="button" id="cancel-email" class="btn-ghost">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary">Update</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- AVATAR PICKER MODAL -->
+    <div
+      id="avatar-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card" style="max-width: 380px">
+        <h2>Choose avatar</h2>
+        <p style="margin-bottom: 14px; color: var(--ink-soft)">
+          Select an icon to represent your profile.
+        </p>
+        <div id="avatar-grid" class="avatar-grid">
+          <button type="button" class="avatar-cell" data-avatar="🦊">🦊</button>
+          <button type="button" class="avatar-cell" data-avatar="🐱">🐱</button>
+          <button type="button" class="avatar-cell" data-avatar="🐶">🐶</button>
+          <button type="button" class="avatar-cell" data-avatar="🐼">🐼</button>
+          <button type="button" class="avatar-cell" data-avatar="🦁">🦁</button>
+          <button type="button" class="avatar-cell" data-avatar="🚀">🚀</button>
+          <button type="button" class="avatar-cell" data-avatar="💎">💎</button>
+          <button type="button" class="avatar-cell" data-avatar="⭐">⭐</button>
+          <button type="button" class="avatar-cell" data-avatar="🔥">🔥</button>
+          <button type="button" class="avatar-cell" data-avatar="🎨">🎨</button>
+          <button type="button" class="avatar-cell" data-avatar="⚡">⚡</button>
+          <button type="button" class="avatar-cell" data-avatar="🍀">🍀</button>
+          <button type="button" class="avatar-cell" data-avatar="👤">👤</button>
+          <button type="button" class="avatar-cell" data-avatar="🤖">🤖</button>
+          <button type="button" class="avatar-cell" data-avatar="👻">👻</button>
+          <button type="button" class="avatar-cell" data-avatar="🦄">🦄</button>
+        </div>
+        <div class="modal-actions" style="margin-top: 18px">
+          <button
+            type="button"
+            id="close-avatar-modal"
+            class="btn-ghost"
+            style="width: 100%"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CURRENCY MODAL -->
+    <div
+      id="currency-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+    >
+      <div class="modal-card">
+        <h2 id="currency-modal-title">Currency Options</h2>
+        <div
+          id="currency-menu-view"
+          style="
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 14px;
+          "
+        >
+          <button
+            type="button"
+            id="menu-change-currency"
+            class="btn-ghost"
+            style="width: 100%; justify-content: flex-start; text-align: left"
+          >
+            Change Currency Symbol
+          </button>
+          <button
+            type="button"
+            id="menu-convert-currency"
+            class="btn-primary"
+            style="width: 100%"
+          >
+            Convert Currency via Live Exchange Rate
+          </button>
+          <button
+            type="button"
+            id="close-currency-modal"
+            class="btn-ghost"
+            style="width: 100%; margin-top: 6px"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <!-- CHANGE CURRENCY SUBVIEW -->
+        <div id="currency-change-view" class="hidden" style="margin-top: 14px">
+          <label for="currency-select">Select Currency Symbol</label>
+          <select id="currency-select">
+            <option value="$">USD ($)</option>
+            <option value="€">EUR (€)</option>
+            <option value="£">GBP (£)</option>
+            <option value="¥">JPY (¥)</option>
+            <option value="₱">PHP (₱)</option>
+            <option value="A$">AUD (A$)</option>
+            <option value="C$">CAD (C$)</option>
+            <option value="₹">INR (₹)</option>
+            <option value="R$">BRL (R$)</option>
+            <option value="Fr">CHF (Fr)</option>
+          </select>
+          <div class="modal-actions" style="margin-top: 16px">
+            <button type="button" id="back-currency-menu" class="btn-ghost">
+              Back
+            </button>
+            <button type="button" id="save-currency-btn" class="btn-primary">
+              Save
+            </button>
+          </div>
+        </div>
+
+        <!-- CONVERT CURRENCY SUBVIEW -->
+        <div id="currency-convert-view" class="hidden" style="margin-top: 14px">
+          <label for="convert-target-select">Convert to Target Currency</label>
+          <select id="convert-target-select">
+            <option value="USD">USD ($)</option>
+            <option value="EUR">EUR (€)</option>
+            <option value="GBP">GBP (£)</option>
+            <option value="JPY">JPY (¥)</option>
+            <option value="PHP">PHP (₱)</option>
+            <option value="AUD">AUD (A$)</option>
+            <option value="CAD">CAD (C$)</option>
+            <option value="INR">INR (₹)</option>
+            <option value="BRL">BRL (R$)</option>
+            <option value="CHF">CHF (Fr)</option>
+          </select>
+          <p id="convert-status" class="note" style="margin: 10px 0">
+            Fetches live exchange rates from global financial services.
+          </p>
+          <div class="modal-actions" style="margin-top: 16px">
+            <button type="button" id="back-currency-menu-2" class="btn-ghost">
+              Back
+            </button>
+            <button type="button" id="execute-convert-btn" class="btn-primary">
+              Convert Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION -->
+    <div id="toast" class="toast hidden" role="status" aria-live="polite">
+      <svg
+        class="toast-icon"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2.5"
+      >
+        <path d="M20 6L9 17l-5-5" />
+      </svg>
+      <span id="toast-message"></span>
+    </div>
+
+    <!-- INTERACTIVE HELP TOOLTIP POPOVER -->
+    <div id="app-tooltip" class="app-tooltip hidden" role="tooltip">
+      <div id="app-tooltip-text" class="app-tooltip-text"></div>
+      <span class="app-tooltip-arrow" aria-hidden="true"></span>
+    </div>
+
+    <script>
+      window.bootApp = function bootApp() {
+        if (window.__booted) return;
+        window.__booted = true;
+
+        var cachedAppJs = null;
+        try {
+          cachedAppJs = localStorage.getItem("budgelist-bundle-app-js");
+        } catch (e) {}
+
+        if (cachedAppJs) {
+          try {
+            // Compile bundle before mutating DOM so syntax/corrupt errors never leave half-applied HTML
+            var runner = new Function(cachedAppJs);
+            try {
+              var cachedBodyHtml = localStorage.getItem("budgelist-bundle-body-html");
+              if (cachedBodyHtml) {
+                window.__otaBodyInjected = true;
+                document.body.innerHTML = cachedBodyHtml;
+              }
+            } catch (bodyErr) {
+              console.warn("[OTA] Failed to apply cached body HTML:", bodyErr);
+            }
+            runner();
+            return;
+          } catch (err) {
+            console.error("[OTA] Cached bundle execution failed, clearing cache and falling back to native app:", err);
+            try {
+              localStorage.removeItem("budgelist-bundle-app-js");
+              localStorage.removeItem("budgelist-bundle-style-css");
+              localStorage.removeItem("budgelist-bundle-body-html");
+              localStorage.removeItem("budgelist-installed-bundle-key");
+              localStorage.removeItem("budgelist-installed-bundle-tag");
+              localStorage.removeItem("budgelist-installed-bundle-channel");
+              localStorage.removeItem("budgelist-installed-bundle-time");
+            } catch (e) {}
+            if (window.__otaBodyInjected) {
+              window.location.reload();
+              return;
+            }
+          }
+        }
+
+        // Fallback to native app.js script from disk
+        var script = document.createElement("script");
+        script.type = "module";
+        script.src = "app.js";
+        document.body.appendChild(script);
+      };
+
+      if (window.__FIREBASE__) {
+        window.bootApp();
+      }
+    </script>
+  </body>
+</html>

@@ -94,13 +94,13 @@ To build and run Budgelist locally:
    npm install
    ```
 
-2. **Firebase Setup**:
+2. **Firebase Setup & Web Build**:
    - Create a Firebase project in the [Firebase Console](https://console.firebase.google.com/).
    - Enable **Authentication** (Email/Password provider).
    - Enable **Cloud Firestore** and deploy the rules defined in `firestore.rules`.
    - Copy `www/firebase-config.example.js` to `www/firebase-config.js` and populate your Web API credentials.
    - Place your Android `google-services.json` inside `android/app/google-services.json` (see `android/app/google-services.json.example`).
-   - Run `npx cap sync android` to synchronize web assets into `android/app/src/main/assets/public/`.
+   - Run `npm run build` to bundle the modular source files in `src/` (`src/js/`, `src/css/`, `src/index.html`) into `www/` and synchronize `android/app/src/main/assets/public/`.
 
 3. **Build Android App**:
    - Open the `android` directory in **Android Studio**.

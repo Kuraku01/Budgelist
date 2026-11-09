@@ -4533,10 +4533,6 @@ if (unrestrictMonthBtn) {
 }
 
 budgetBtn.addEventListener("click", openMonthBudgetSheet);
-const unrestrictedSetBudgetBtn = $("unrestricted-set-budget-btn");
-if (unrestrictedSetBudgetBtn) {
-  unrestrictedSetBudgetBtn.addEventListener("click", openMonthBudgetSheet);
-}
 const summaryStatBudgetCard = $("summary-stat-budget");
 if (summaryStatBudgetCard) {
   summaryStatBudgetCard.addEventListener("click", (e) => {
@@ -5396,14 +5392,12 @@ function renderSummaryCard(spent) {
   const tipSpentEl = $("tip-summary-spent");
   const tipBudgetEl = $("tip-summary-budget");
   const tipRemainingEl = $("tip-summary-remaining");
-  const unrestrictedNotice = $("unrestricted-budget-notice");
   const pastNotice = $("past-month-notice");
   const pastNoticeText = $("past-month-notice-text");
   const pastNoticeBtn = $("past-month-notice-btn");
 
   if (summarySpent) summarySpent.textContent = fmt(spent);
   if (summaryStatBudget) summaryStatBudget.classList.toggle("interactive", !past);
-  if (unrestrictedNotice) unrestrictedNotice.classList.add("hidden");
 
   if (past) {
     // Past Month History View: hide forward-looking details (Remaining, Progress Bar, Set Budget)
