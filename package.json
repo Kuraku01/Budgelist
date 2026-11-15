@@ -1,12 +1,14 @@
 {
   "name": "budgelist",
-  "version": "0.2.1-beta",
+  "version": "0.2.2-beta",
   "description": "Log spending, catch recurring bills, and see a trend-line forecast of where you'll land this month against your budget.",
   "main": "app.js",
   "scripts": {
     "build": "node scripts/build.js",
     "check": "node scripts/build.js --check",
-    "test": "node scripts/build.js --check"
+    "test": "node scripts/build.js --check",
+    "deploy": "npx -y firebase-tools@latest deploy --only hosting,firestore:rules --project budgelistapp",
+    "deploy:hosting": "npx -y firebase-tools@latest deploy --only hosting --project budgelistapp"
   },
   "keywords": [],
   "type": "module",

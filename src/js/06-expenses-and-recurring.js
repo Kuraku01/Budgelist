@@ -352,6 +352,9 @@ function closeExpenseSheet() {
 }
 
 addBtn.addEventListener("click", () => openExpenseSheet(null));
+if ($("add-expense-inline-btn")) {
+  $("add-expense-inline-btn").addEventListener("click", () => openExpenseSheet(null));
+}
 $("cancel-add").addEventListener("click", closeExpenseSheet);
 
 // ---------- Recurring bills ----------

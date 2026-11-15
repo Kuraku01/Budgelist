@@ -1,4 +1,4 @@
-// OTA Bundle Build Key: v0.2.1-beta
+// OTA Bundle Build Key: v0.2.2-beta
 const {
   firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
@@ -93,6 +93,15 @@ let categoryChartType = safeGet("budgelist-cat-chart") || "pie";
 let expenseViewMode = safeGet("budgelist-expense-view") || "grouped";
 let recurringViewMode = safeGet("budgelist-recurring-view") || "list";
 let expenseCategoryFilter = "ALL";
+let expensePageSize = (() => {
+  const saved = parseInt(safeGet("budgelist-expense-page-size") || "10", 10);
+  return [5, 10, 15, 25, 50, 0].includes(saved) ? saved : 10;
+})();
+let expenseCurrentPage = 1;
+let uiZoomPercent = (() => {
+  const saved = parseInt(safeGet("budgelist-ui-zoom") || "100", 10);
+  return [80, 90, 100, 110, 120].includes(saved) ? saved : 100;
+})();
 const collapsedExpenseDays = new Set();
 
 // ---------- State ----------

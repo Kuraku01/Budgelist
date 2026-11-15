@@ -1,17 +1,25 @@
 # Budgelist
 
-![Version](https://img.shields.io/badge/version-0.2.1--beta-purple.svg)
-![Platform](https://img.shields.io/badge/platform-Android-blue.svg)
+![Version](https://img.shields.io/badge/version-0.2.2--beta-purple.svg)
+![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Web-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Offline Support](https://img.shields.io/badge/offline-100%25%20supported-brightgreen.svg)
 
-**Budgelist** is a privacy-focused personal expense tracker, two-tier budgeting application, and financial forecasting tool. It combines local-first offline performance with real-time cloud synchronization across devices.
+**Budgelist** is a privacy-focused personal expense tracker, two-tier budgeting application, and financial forecasting tool available as both a **native Android app** and a **live Web App** ([budgelistapp.web.app](https://budgelistapp.web.app)). It combines local-first offline performance with real-time cloud synchronization across devices.
 
 The application allows users to manage an overall **Budget Pool**, allocate optional monthly spending caps, log daily expenses across multiple view modes, track recurring bills, convert between global currencies using live exchange rates, and view multi-factor trend-line forecasts predicting end-of-month budget adherence.
 
 ---
 
-## What's New in v0.2.1-beta
+## What's New in v0.2.2-beta
+
+- **Live Web App & Adaptive Multi-Screen Layout**: Hosted live on Firebase Hosting at [budgelistapp.web.app](https://budgelistapp.web.app) with responsive layouts for phones (`<640px`), tablets (`640px+` with centered floating modal dialogs and 3-column grid views), and laptops/desktops (`960px+` two-column split dashboard).
+- **Customizable Expense Pagination**: Paginate long monthly expense lists with `Showing X–Y of Z` page navigation and configure how many items appear per page (`5`, `10`, `15`, `25`, `50`, or `All`) in **Settings &rarr; Appearance**.
+- **UI Zoom Presets (`80%`–`120%`)**: Scale text, cards, and controls in **Settings &rarr; Appearance** to fit your device preference without altering the active phone, tablet, or desktop layout breakpoint.
+- **Click-Outside Popup Dismissal**: Tap or click on the backdrop outside any open bottom sheet or modal dialog to close it immediately.
+- **Modular Source Architecture (`src/` &rarr; `www/`)**: Refactored into modular JS and CSS packages with automated `npm run build` and `npm run check` validation.
+
+### Highlights from v0.2.1-beta
 
 - **Redesigned Two-Tier Overview & Spent Progress Bar**: Clear visual separation between your **Budget Pool** reserve at the top and **Monthly Spending** below (with `Monthly Cap` vs. `Uses Pool` mode pill and `Pool Limit` / `Month Budget` stat clarity), plus an upgraded **Spent** progress bar featuring `$0` and limit end labels, a vertical current-spent marker, and a live floating spent callout.
 - **Interactive Help Tooltips (`?`)**: Tap or hover `?` badges across Overview, Analytics & Forecast, By Category, Recurring Bills, Expenses, Budget sheets, and Settings for plain-language explanations of every calculation and mode.
@@ -79,8 +87,8 @@ The application allows users to manage an overall **Budget Pool**, allocate opti
 
 ### Installing the Android Application
 
-1. Navigate to the [Releases](https://github.com/Kuraku01/Budgelist/releases) page of this repository.
-2. Download the latest `Budgelist_0.2.1-beta.apk` asset.
+1. Navigate to the [Releases](https://github.com/Kuraku01/Budgelist/releases) page of this repository (or use the live Web App at [budgelistapp.web.app](https://budgelistapp.web.app)).
+2. Download the latest `Budgelist_0.2.2-beta.apk` asset.
 3. Open the downloaded file on your Android device to complete installation.
 
 ### Developer Setup & Building From Source

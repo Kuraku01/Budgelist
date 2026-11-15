@@ -707,3 +707,97 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
+
+// Close sheets and modal dialogs when clicking/tapping directly on the backdrop outside the popup card
+let backdropPointerDownTarget = null;
+document.addEventListener("pointerdown", (e) => {
+  backdropPointerDownTarget = e.target;
+});
+
+document.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!target || !target.classList) return;
+
+  // Ensure the press started on the backdrop itself (prevents closing when dragging text selection out of an input)
+  if (backdropPointerDownTarget && backdropPointerDownTarget !== target) {
+    backdropPointerDownTarget = null;
+    return;
+  }
+  backdropPointerDownTarget = null;
+
+  if (!target.classList.contains("sheet") && !target.classList.contains("modal-overlay")) {
+    return;
+  }
+
+  // If a child dropdown or date picker inside the sheet is open, close that inner layer first
+  const openSelects = document.querySelectorAll(".custom-select-wrapper.open");
+  if (openSelects.length > 0) {
+    closeAllCustomSelects();
+    return;
+  }
+  if (isOverlayVisible("expense-date-popover")) {
+    closeExpenseCalendar();
+    return;
+  }
+
+  switch (target.id) {
+    case "add-sheet":
+      closeExpenseSheet();
+      break;
+    case "recurring-sheet":
+      closeRecurringSheet();
+      break;
+    case "budget-sheet":
+      if ($("cancel-budget")) $("cancel-budget").click();
+      else target.classList.add("hidden");
+      break;
+    case "global-budget-sheet":
+      closeGlobalBudgetSheet();
+      break;
+    case "overbudget-sheet":
+      closeOverbudgetSheet();
+      break;
+    case "unlock-past-sheet":
+      closeUnlockPastSheet();
+      break;
+    case "settings-sheet":
+      closeSettingsSheet();
+      break;
+    case "guest-modal":
+    case "logout-modal":
+    case "avatar-modal":
+      target.classList.add("hidden");
+      break;
+    case "network-modal":
+      if ($("cancel-network")) $("cancel-network").click();
+      else target.classList.add("hidden");
+      break;
+    case "password-modal":
+      if ($("cancel-password")) $("cancel-password").click();
+      else target.classList.add("hidden");
+      break;
+    case "email-modal":
+      if ($("cancel-email")) $("cancel-email").click();
+      else target.classList.add("hidden");
+      break;
+    case "currency-modal":
+      target.classList.add("hidden");
+      currencyOpenedDirectly = false;
+      break;
+    case "update-modal": {
+      const isStartupView = isOverlayVisible("update-startup-view");
+      if (isStartupView && pendingStartupUpdate && pendingStartupUpdate.isForced) {
+        return;
+      }
+      if (isStartupView && $("cancel-update-btn")) {
+        $("cancel-update-btn").click();
+      } else {
+        closeUpdateModal();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+});
+

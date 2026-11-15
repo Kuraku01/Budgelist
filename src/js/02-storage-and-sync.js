@@ -287,9 +287,44 @@ function applyColorTheme(colorTheme) {
   });
 }
 
+function applyUiZoom(zoomPct) {
+  const validZooms = [80, 90, 100, 110, 120];
+  const parsed = parseInt(zoomPct, 10);
+  const normalized = validZooms.includes(parsed) ? parsed : 100;
+  uiZoomPercent = normalized;
+  safeSet("budgelist-ui-zoom", String(normalized));
+  document.documentElement.style.setProperty("--ui-zoom", (normalized / 100).toFixed(2));
+  const zoomBadge = $("settings-zoom-badge");
+  if (zoomBadge) zoomBadge.textContent = `${normalized}%`;
+  document.querySelectorAll(".ui-zoom-btn").forEach((btn) => {
+    btn.classList.toggle("active", parseInt(btn.dataset.uiZoom, 10) === normalized);
+  });
+}
+
+function applyExpensePageSize(pageSizeVal, shouldRender = false) {
+  const validSizes = [5, 10, 15, 25, 50, 0];
+  const parsed = parseInt(pageSizeVal, 10);
+  const normalized = validSizes.includes(parsed) ? parsed : 10;
+  expensePageSize = normalized;
+  expenseCurrentPage = 1;
+  safeSet("budgelist-expense-page-size", String(normalized));
+  const sizeBadge = $("settings-page-size-badge");
+  if (sizeBadge) {
+    sizeBadge.textContent = normalized === 0 ? "All items" : `${normalized} / page`;
+  }
+  document.querySelectorAll(".exp-page-size-btn").forEach((btn) => {
+    btn.classList.toggle("active", parseInt(btn.dataset.expPageSize, 10) === normalized);
+  });
+  if (shouldRender && typeof render === "function") {
+    render();
+  }
+}
+
 applyTheme(safeGet("budgelist-theme") ||
   (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 applyColorTheme(safeGet("budgelist-color-theme") || "violet");
+applyUiZoom(uiZoomPercent);
+applyExpensePageSize(expensePageSize, false);
 
 $("theme-toggle").addEventListener("click", () => {
   const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";

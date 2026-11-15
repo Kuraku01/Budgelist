@@ -33,6 +33,8 @@ function openSettingsSheet() {
   document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.colorTheme === activeColorTheme);
   });
+  if (typeof applyUiZoom === "function") applyUiZoom(uiZoomPercent);
+  if (typeof applyExpensePageSize === "function") applyExpensePageSize(expensePageSize, false);
   $("settings-auto-sync-toggle").checked = autoSyncVal;
 
   $("settings-sheet").classList.remove("hidden");
@@ -574,6 +576,22 @@ document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
     const selected = btn.dataset.colorTheme || "violet";
     applyColorTheme(selected);
     render();
+  });
+});
+
+document.querySelectorAll(".ui-zoom-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const zoomVal = parseInt(btn.dataset.uiZoom || "100", 10);
+    applyUiZoom(zoomVal);
+    showToast(`UI Zoom set to ${zoomVal}%`);
+  });
+});
+
+document.querySelectorAll(".exp-page-size-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const sizeVal = parseInt(btn.dataset.expPageSize || "10", 10);
+    applyExpensePageSize(sizeVal, true);
+    showToast(sizeVal === 0 ? "Showing all expenses on one page" : `Showing ${sizeVal} expenses per page`);
   });
 });
 

@@ -14,3 +14,6 @@ google-services.json
 dist.zip
 dist-unstable.zip
 ota-manifest.json
+.firebase/
+firebase-debug.log*
+firestore-debug.log*

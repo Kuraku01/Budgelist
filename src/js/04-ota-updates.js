@@ -1,4 +1,21 @@
-const APP_VERSION = "0.2.1-beta";
+const APP_VERSION = "0.2.2-beta";
+
+function isRunningInNativeAndroid() {
+  try {
+    if (window.AndroidBridge) return true;
+    if (
+      window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === "function" &&
+      window.Capacitor.isNativePlatform()
+    ) {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+const IS_NATIVE_ANDROID = isRunningInNativeAndroid();
+const IS_WEB_HOSTED = !IS_NATIVE_ANDROID;
 
 function detectNativeApkVersion() {
   try {
@@ -7,7 +24,7 @@ function detectNativeApkVersion() {
       typeof window.AndroidBridge.getNativeBuildSignature === "function"
     ) {
       const sig = window.AndroidBridge.getNativeBuildSignature();
-      if (sig && typeof sig === "string") {
+      if (sig && typeof sig && typeof sig === "string") {
         // Signature format in v0.2.1+: "v<versionName>_<lastUpdateTime>"
         return sig.split("_")[0].replace(/^v/i, "").trim() || APP_VERSION;
       }
@@ -126,10 +143,10 @@ function updateAboutChannelBadge() {
       }
     }
   } else {
-    badge.textContent = "Built-in";
-    badge.className = "channel-badge native";
+    badge.textContent = IS_WEB_HOSTED ? "Web App" : "Built-in";
+    badge.className = IS_WEB_HOSTED ? "channel-badge stable" : "channel-badge native";
     if (verBadge) {
-      verBadge.textContent = formatVersionTag(NATIVE_APP_VERSION);
+      verBadge.textContent = formatVersionTag(IS_WEB_HOSTED ? APP_VERSION : NATIVE_APP_VERSION);
     }
     if (verNote) {
       verNote.classList.add("hidden");
@@ -493,12 +510,14 @@ function showManualUpdateModal(info) {
     ? info.installedChannel === "unstable"
       ? "Testing Build"
       : "Live Update"
-    : "Built-in";
+    : IS_WEB_HOSTED
+      ? "Web App"
+      : "Built-in";
 
   if (modalTitle) modalTitle.textContent = "Update Center";
   if (modalMsg) {
     modalMsg.textContent =
-      NATIVE_APP_VERSION !== APP_VERSION
+      !IS_WEB_HOSTED && NATIVE_APP_VERSION !== APP_VERSION
         ? `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel}) • Base Android app: ${formatVersionTag(NATIVE_APP_VERSION)}`
         : `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel})`;
   }
@@ -508,7 +527,25 @@ function showManualUpdateModal(info) {
   const nativeMeta = $("manual-native-meta");
   const nativeBtn = $("manual-native-btn");
 
-  if (info.hasNativeUpdate) {
+  if (IS_WEB_HOSTED) {
+    if (nativeBadge) {
+      nativeBadge.textContent = info.apkAsset ? "Android APK" : "Releases";
+      nativeBadge.className = "channel-badge stable";
+    }
+    if (nativeMeta) {
+      nativeMeta.textContent = info.apkAsset
+        ? `${formatVersionTag(info.latestTag)} • ${formatAssetMeta(info.apkAsset)}`
+        : `Latest release: ${formatVersionTag(info.latestTag)}`;
+    }
+    if (nativeBtn) {
+      nativeBtn.classList.remove("hidden");
+      nativeBtn.textContent = "Get App";
+      nativeBtn.onclick = () => {
+        closeUpdateModal();
+        openExternalReleaseUrl(info.apkAsset?.browser_download_url || info.releaseUrl);
+      };
+    }
+  } else if (info.hasNativeUpdate) {
     if (nativeBadge) {
       nativeBadge.textContent = "Update Available";
       nativeBadge.className = "channel-badge stable";
@@ -544,7 +581,24 @@ function showManualUpdateModal(info) {
   const stableMeta = $("manual-stable-meta");
   const stableBtn = $("manual-stable-btn");
 
-  if (!info.stableAsset) {
+  if (IS_WEB_HOSTED && !info.hasInstalledBundle) {
+    if (stableBadge) {
+      stableBadge.textContent = "Live on Web";
+      stableBadge.className = "channel-badge installed";
+    }
+    if (stableMeta) {
+      stableMeta.textContent = "Updates automatically via Firebase Hosting";
+    }
+    if (stableBtn) {
+      stableBtn.disabled = false;
+      stableBtn.className = "btn-ghost update-channel-btn";
+      stableBtn.textContent = "Reload";
+      stableBtn.onclick = () => {
+        closeUpdateModal();
+        window.location.reload();
+      };
+    }
+  } else if (!info.stableAsset) {
     if (stableBadge) {
       stableBadge.textContent = "Unavailable";
       stableBadge.className = "channel-badge native";
@@ -679,7 +733,9 @@ function getLocalBundleSummary() {
     ? installedChannel === "unstable"
       ? "Testing Build"
       : "Live Update"
-    : "Built-in";
+    : IS_WEB_HOSTED
+      ? "Web App"
+      : "Built-in";
   return { hasInstalledBundle, installedChannel, activeChannelLabel };
 }
 
@@ -687,7 +743,9 @@ function bindRevertNativeButton(hasInstalledBundle) {
   const revertBtn = $("manual-revert-native-btn");
   if (!revertBtn) return;
   revertBtn.classList.toggle("hidden", !hasInstalledBundle);
-  revertBtn.textContent = `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
+  revertBtn.textContent = IS_WEB_HOSTED
+    ? `Reset to Hosted Web App (${formatVersionTag(APP_VERSION)})`
+    : `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
   revertBtn.onclick = () => {
     try {
       localStorage.removeItem("budgelist-bundle-app-js");
@@ -1185,7 +1243,10 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
     }
   }
 
-  // Startup Background Check
+  // Startup Background Check (Native Android only — Web App always serves latest from Firebase Hosting)
+  if (IS_WEB_HOSTED) {
+    return false;
+  }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return false;
   }

@@ -672,6 +672,7 @@ function renderExpenseCategoryFilterChips(monthExpenses) {
   allChip.textContent = `All (${monthExpenses.length})`;
   allChip.addEventListener("click", () => {
     expenseCategoryFilter = "ALL";
+    expenseCurrentPage = 1;
     renderExpenseList(monthExpenses);
   });
   frag.appendChild(allChip);
@@ -689,12 +690,90 @@ function renderExpenseCategoryFilterChips(monthExpenses) {
     chip.appendChild(label);
     chip.addEventListener("click", () => {
       expenseCategoryFilter = expenseCategoryFilter === cat ? "ALL" : cat;
+      expenseCurrentPage = 1;
       renderExpenseList(monthExpenses);
     });
     frag.appendChild(chip);
   });
 
   filterWrap.appendChild(frag);
+}
+
+function renderExpensePaginationControls(totalItems, totalPages, monthExpenses) {
+  const pagEl = $("expense-pagination");
+  if (!pagEl) return;
+
+  if (totalPages <= 1 || totalItems === 0 || expensePageSize <= 0) {
+    pagEl.classList.add("hidden");
+    pagEl.innerHTML = "";
+    return;
+  }
+
+  pagEl.classList.remove("hidden");
+  pagEl.innerHTML = "";
+
+  const startIdx = (expenseCurrentPage - 1) * expensePageSize + 1;
+  const endIdx = Math.min(totalItems, expenseCurrentPage * expensePageSize);
+
+  const infoSpan = document.createElement("span");
+  infoSpan.className = "expense-page-info";
+  infoSpan.innerHTML = `Showing <strong>${startIdx}–${endIdx}</strong> of <strong>${totalItems}</strong>`;
+
+  const navWrap = document.createElement("div");
+  navWrap.className = "expense-page-nav";
+
+  const makePageBtn = (label, targetPage, isActive = false, isDisabled = false, ariaLabel = "") => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `expense-page-btn${isActive ? " active" : ""}`;
+    btn.textContent = label;
+    btn.disabled = isDisabled;
+    if (ariaLabel) btn.setAttribute("aria-label", ariaLabel);
+    if (!isDisabled && !isActive) {
+      btn.addEventListener("click", () => {
+        expenseCurrentPage = targetPage;
+        renderExpenseList(monthExpenses);
+      });
+    }
+    return btn;
+  };
+
+  navWrap.appendChild(
+    makePageBtn("‹", expenseCurrentPage - 1, false, expenseCurrentPage <= 1, "Previous page")
+  );
+
+  const pagesToShow = [];
+  if (totalPages <= 5) {
+    for (let p = 1; p <= totalPages; p++) pagesToShow.push(p);
+  } else {
+    pagesToShow.push(1);
+    if (expenseCurrentPage > 3) pagesToShow.push("...");
+    const startP = Math.max(2, expenseCurrentPage - 1);
+    const endP = Math.min(totalPages - 1, expenseCurrentPage + 1);
+    for (let p = startP; p <= endP; p++) pagesToShow.push(p);
+    if (expenseCurrentPage < totalPages - 2) pagesToShow.push("...");
+    pagesToShow.push(totalPages);
+  }
+
+  pagesToShow.forEach((p) => {
+    if (p === "...") {
+      const dots = document.createElement("span");
+      dots.className = "expense-page-ellipsis";
+      dots.textContent = "…";
+      navWrap.appendChild(dots);
+    } else {
+      navWrap.appendChild(
+        makePageBtn(String(p), p, p === expenseCurrentPage, false, `Page ${p}`)
+      );
+    }
+  });
+
+  navWrap.appendChild(
+    makePageBtn("›", expenseCurrentPage + 1, false, expenseCurrentPage >= totalPages, "Next page")
+  );
+
+  pagEl.appendChild(infoSpan);
+  pagEl.appendChild(navWrap);
 }
 
 function renderExpenseList(monthExpenses) {
@@ -730,14 +809,40 @@ function renderExpenseList(monthExpenses) {
   container.className = `expense-list view-${effectiveMode}`;
   container.innerHTML = "";
 
-  if (sorted.length === 0) return;
+  if (sorted.length === 0) {
+    renderExpensePaginationControls(0, 0, monthExpenses);
+    return;
+  }
+
+  // Paginate sorted items based on user setting (0 = show all)
+  const totalItems = sorted.length;
+  const totalPages = expensePageSize > 0 ? Math.max(1, Math.ceil(totalItems / expensePageSize)) : 1;
+  if (expenseCurrentPage > totalPages) expenseCurrentPage = totalPages;
+  if (expenseCurrentPage < 1) expenseCurrentPage = 1;
+
+  const pageItems =
+    expensePageSize > 0
+      ? sorted.slice((expenseCurrentPage - 1) * expensePageSize, expenseCurrentPage * expensePageSize)
+      : sorted;
+
+  // Compute full-day totals across the entire filtered month so grouped day headers remain accurate across page splits
+  const fullDayStats = new Map();
+  sorted.forEach((e) => {
+    const key = e.dateISO || "unknown";
+    if (!fullDayStats.has(key)) {
+      fullDayStats.set(key, { total: 0, count: 0 });
+    }
+    const st = fullDayStats.get(key);
+    st.total = round2(st.total + (Number(e.amount) || 0));
+    st.count += 1;
+  });
 
   const fragment = document.createDocumentFragment();
 
   if (effectiveMode === "grouped") {
     const groups = [];
     const groupMap = new Map();
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const key = e.dateISO || "unknown";
       if (!groupMap.has(key)) {
         const g = { dateISO: key, items: [], total: 0 };
@@ -765,9 +870,13 @@ function renderExpenseList(monthExpenses) {
       titleSpan.className = "expense-day-title";
       titleSpan.textContent = formatExpenseDayGroupLabel(g.dateISO);
 
+      const fullSt = fullDayStats.get(g.dateISO);
       const countSpan = document.createElement("span");
       countSpan.className = "expense-day-count";
-      countSpan.textContent = `· ${g.items.length}`;
+      countSpan.textContent =
+        fullSt && fullSt.count > g.items.length
+          ? `· ${g.items.length} of ${fullSt.count}`
+          : `· ${g.items.length}`;
 
       titleWrap.appendChild(titleSpan);
       titleWrap.appendChild(countSpan);
@@ -777,7 +886,7 @@ function renderExpenseList(monthExpenses) {
 
       const totalSpan = document.createElement("span");
       totalSpan.className = "expense-day-total";
-      totalSpan.textContent = fmt(g.total);
+      totalSpan.textContent = fmt(fullSt ? fullSt.total : g.total);
 
       const chevSpan = document.createElement("span");
       chevSpan.className = "day-group-chevron";
@@ -863,7 +972,7 @@ function renderExpenseList(monthExpenses) {
       fragment.appendChild(groupLi);
     });
   } else if (effectiveMode === "compact") {
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const li = document.createElement("li");
       li.dataset.id = e.id;
 
@@ -915,7 +1024,7 @@ function renderExpenseList(monthExpenses) {
     });
   } else {
     // Grid Cards Mode
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const li = document.createElement("li");
       li.dataset.id = e.id;
       const color = catColor(e.category);
@@ -975,6 +1084,7 @@ function renderExpenseList(monthExpenses) {
   }
 
   container.appendChild(fragment);
+  renderExpensePaginationControls(totalItems, totalPages, monthExpenses);
 }
 
 function formatOrdinalDay(day) {

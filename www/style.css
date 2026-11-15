@@ -3607,3 +3607,332 @@ select {
   border-left: 1.5px solid color-mix(in srgb, var(--primary) 42%, var(--line));
   border-top: 1.5px solid color-mix(in srgb, var(--primary) 42%, var(--line));
 }
+
+/* ---------- Adaptive Multi-Screen Layout (Mobile / Tablet / Desktop) ---------- */
+.dashboard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.dashboard-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Tablet & Wide Mobile (640px+): Centered Modal Dialogs, Wider Content, Card Auth */
+@media (min-width: 640px) {
+  #app-screen {
+    max-width: 720px;
+    padding: 24px 24px 64px;
+  }
+
+  .auth-card {
+    max-width: 440px;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 22px;
+    padding: 36px 32px;
+    box-shadow: 0 20px 50px -12px rgba(0, 0, 0, 0.14);
+  }
+
+  /* Transform bottom sheets into centered floating dialogs on larger screens */
+  .sheet {
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .sheet-content {
+    max-width: 480px;
+    max-height: min(88vh, 760px);
+    overflow-y: auto;
+    border-radius: 22px;
+    border: 1.5px solid var(--line);
+    border-top: 4px solid var(--primary);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    padding: 22px 24px 24px;
+    transform: scale(1) translateY(0);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .sheet.hidden .sheet-content {
+    transform: scale(0.95) translateY(12px);
+  }
+
+  .sheet-handle {
+    display: none;
+  }
+
+  /* Constrain calendar popover into a floating centered card under the month nav */
+  #calendar-popover {
+    max-width: 380px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* Roomier summary & forecast stat cards */
+  .summary-grid {
+    gap: 12px;
+  }
+
+  .summary-stat {
+    padding: 12px 10px;
+  }
+
+  .summary-stat-label {
+    font-size: 10.5px;
+  }
+
+  .summary-stat-value {
+    font-size: 16px;
+  }
+
+  .summary-stat-sub {
+    font-size: 11px;
+  }
+
+  .forecast-metrics {
+    gap: 12px;
+  }
+
+  .metric-card {
+    padding: 10px 12px;
+  }
+
+  .metric-label {
+    font-size: 10.5px;
+  }
+
+  .metric-value {
+    font-size: 15px;
+  }
+
+  .profile-name {
+    max-width: 180px;
+    font-size: 14px;
+  }
+
+  /* 3-column grid cards when wide enough */
+  .expense-list.view-grid,
+  .recurring-list.view-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .fab {
+    right: 28px;
+    bottom: 28px;
+  }
+}
+
+/* Desktop & Laptop Split-Workspace Dashboard (960px+) */
+@media (min-width: 960px) {
+  #app-screen {
+    max-width: 1140px;
+    padding: 28px 32px 72px;
+  }
+
+  .topbar {
+    margin-bottom: 18px;
+  }
+
+  .month-nav {
+    max-width: 520px;
+    margin: 0 auto 22px;
+    background: var(--surface);
+    border: 1.5px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 10px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(380px, 5fr) minmax(440px, 6fr);
+    gap: 22px;
+    align-items: start;
+  }
+
+  .dashboard-col {
+    gap: 18px;
+  }
+
+  .dashboard-col .summary-card,
+  .dashboard-col .panel,
+  .dashboard-col .warning,
+  .dashboard-col .past-month-notice,
+  .dashboard-col .day-filter-banner {
+    margin-bottom: 0;
+  }
+
+  .summary-card,
+  .panel {
+    padding: 20px;
+    border-radius: 18px;
+    box-shadow: 0 6px 20px -6px rgba(0, 0, 0, 0.05);
+  }
+
+  .expense-card-row:hover,
+  .recurring-list.view-list > li:hover,
+  .expense-list.view-compact > li:hover,
+  .recurring-list.view-compact > li:hover {
+    border-color: color-mix(in srgb, var(--primary) 42%, var(--line));
+    background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+  }
+
+  .expense-list.view-grid > li:hover,
+  .recurring-list.view-grid > li:hover {
+    border-color: var(--primary);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.1);
+  }
+
+  .fab {
+    right: 36px;
+    bottom: 32px;
+    width: 60px;
+    height: 60px;
+  }
+}
+
+/* Widescreen Desktop (1280px+) */
+@media (min-width: 1280px) {
+  #app-screen {
+    max-width: 1260px;
+    padding: 32px 40px 80px;
+  }
+
+  .dashboard-grid {
+    grid-template-columns: minmax(440px, 11fr) minmax(520px, 13fr);
+    gap: 26px;
+  }
+
+  .dashboard-col {
+    gap: 22px;
+  }
+}
+
+/* ---------- Expense Pagination & Appearance Zoom / Page Size Controls ---------- */
+:root {
+  --ui-zoom: 1;
+}
+
+/* Apply UI Zoom to main content cards & dialog cards so layout media queries stay untouched */
+#app-screen,
+.auth-card,
+.loading-card,
+.sheet-content,
+.modal-card {
+  zoom: var(--ui-zoom, 1);
+}
+
+.appearance-option-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.appearance-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.appearance-chip-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.zoom-chip-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.page-size-chip-grid {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.appearance-chip-grid .chip-btn {
+  padding: 7px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.expense-page-info {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.expense-page-info strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.expense-page-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.expense-page-btn {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.expense-page-btn:hover:not(:disabled):not(.active) {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--bg));
+}
+
+.expense-page-btn.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-ink);
+}
+
+.expense-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.expense-page-ellipsis {
+  font-size: 12px;
+  color: var(--ink-soft);
+  padding: 0 2px;
+  user-select: none;
+}
+
+

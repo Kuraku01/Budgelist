@@ -83,6 +83,7 @@ function changeMonth(delta) {
   if (next < min || next > max) return;
   viewDate = next;
   selectedDateISO = null;
+  expenseCurrentPage = 1;
   const grid = $("calendar-grid-days");
   if (grid) grid.classList.add("animate-enter");
   render();
@@ -94,6 +95,7 @@ function changeDay(delta) {
   if (nextDate < min || nextDate > max) return;
   viewDate = startOfMonth(nextDate);
   selectedDateISO = toLocalISO(nextDate);
+  expenseCurrentPage = 1;
   const grid = $("calendar-grid-days");
   if (grid) grid.classList.add("animate-enter");
   render();

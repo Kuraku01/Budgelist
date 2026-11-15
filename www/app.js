@@ -1,4 +1,4 @@
-// OTA Bundle Build Key: v0.2.1-beta
+// OTA Bundle Build Key: v0.2.2-beta
 const {
   firebaseConfig, initializeApp, getAuth, createUserWithEmailAndPassword,
   signInWithEmailAndPassword, signOut, onAuthStateChanged, sendEmailVerification,
@@ -93,6 +93,15 @@ let categoryChartType = safeGet("budgelist-cat-chart") || "pie";
 let expenseViewMode = safeGet("budgelist-expense-view") || "grouped";
 let recurringViewMode = safeGet("budgelist-recurring-view") || "list";
 let expenseCategoryFilter = "ALL";
+let expensePageSize = (() => {
+  const saved = parseInt(safeGet("budgelist-expense-page-size") || "10", 10);
+  return [5, 10, 15, 25, 50, 0].includes(saved) ? saved : 10;
+})();
+let expenseCurrentPage = 1;
+let uiZoomPercent = (() => {
+  const saved = parseInt(safeGet("budgelist-ui-zoom") || "100", 10);
+  return [80, 90, 100, 110, 120].includes(saved) ? saved : 100;
+})();
 const collapsedExpenseDays = new Set();
 
 // ---------- State ----------
@@ -737,9 +746,44 @@ function applyColorTheme(colorTheme) {
   });
 }
 
+function applyUiZoom(zoomPct) {
+  const validZooms = [80, 90, 100, 110, 120];
+  const parsed = parseInt(zoomPct, 10);
+  const normalized = validZooms.includes(parsed) ? parsed : 100;
+  uiZoomPercent = normalized;
+  safeSet("budgelist-ui-zoom", String(normalized));
+  document.documentElement.style.setProperty("--ui-zoom", (normalized / 100).toFixed(2));
+  const zoomBadge = $("settings-zoom-badge");
+  if (zoomBadge) zoomBadge.textContent = `${normalized}%`;
+  document.querySelectorAll(".ui-zoom-btn").forEach((btn) => {
+    btn.classList.toggle("active", parseInt(btn.dataset.uiZoom, 10) === normalized);
+  });
+}
+
+function applyExpensePageSize(pageSizeVal, shouldRender = false) {
+  const validSizes = [5, 10, 15, 25, 50, 0];
+  const parsed = parseInt(pageSizeVal, 10);
+  const normalized = validSizes.includes(parsed) ? parsed : 10;
+  expensePageSize = normalized;
+  expenseCurrentPage = 1;
+  safeSet("budgelist-expense-page-size", String(normalized));
+  const sizeBadge = $("settings-page-size-badge");
+  if (sizeBadge) {
+    sizeBadge.textContent = normalized === 0 ? "All items" : `${normalized} / page`;
+  }
+  document.querySelectorAll(".exp-page-size-btn").forEach((btn) => {
+    btn.classList.toggle("active", parseInt(btn.dataset.expPageSize, 10) === normalized);
+  });
+  if (shouldRender && typeof render === "function") {
+    render();
+  }
+}
+
 applyTheme(safeGet("budgelist-theme") ||
   (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 applyColorTheme(safeGet("budgelist-color-theme") || "violet");
+applyUiZoom(uiZoomPercent);
+applyExpensePageSize(expensePageSize, false);
 
 $("theme-toggle").addEventListener("click", () => {
   const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -1211,6 +1255,8 @@ function openSettingsSheet() {
   document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.colorTheme === activeColorTheme);
   });
+  if (typeof applyUiZoom === "function") applyUiZoom(uiZoomPercent);
+  if (typeof applyExpensePageSize === "function") applyExpensePageSize(expensePageSize, false);
   $("settings-auto-sync-toggle").checked = autoSyncVal;
 
   $("settings-sheet").classList.remove("hidden");
@@ -1755,6 +1801,22 @@ document.querySelectorAll(".theme-swatch-btn").forEach((btn) => {
   });
 });
 
+document.querySelectorAll(".ui-zoom-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const zoomVal = parseInt(btn.dataset.uiZoom || "100", 10);
+    applyUiZoom(zoomVal);
+    showToast(`UI Zoom set to ${zoomVal}%`);
+  });
+});
+
+document.querySelectorAll(".exp-page-size-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const sizeVal = parseInt(btn.dataset.expPageSize || "10", 10);
+    applyExpensePageSize(sizeVal, true);
+    showToast(sizeVal === 0 ? "Showing all expenses on one page" : `Showing ${sizeVal} expenses per page`);
+  });
+});
+
 $("settings-auto-sync-toggle").addEventListener("change", (e) => {
   safeSet(cacheKey("auto-sync"), String(e.target.checked));
   showToast(e.target.checked ? "Auto sync enabled" : "Manual sync enabled");
@@ -1775,7 +1837,24 @@ document.querySelectorAll(".accordion-header").forEach((header) => {
   });
 });
 
-const APP_VERSION = "0.2.1-beta";
+const APP_VERSION = "0.2.2-beta";
+
+function isRunningInNativeAndroid() {
+  try {
+    if (window.AndroidBridge) return true;
+    if (
+      window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === "function" &&
+      window.Capacitor.isNativePlatform()
+    ) {
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+const IS_NATIVE_ANDROID = isRunningInNativeAndroid();
+const IS_WEB_HOSTED = !IS_NATIVE_ANDROID;
 
 function detectNativeApkVersion() {
   try {
@@ -1784,7 +1863,7 @@ function detectNativeApkVersion() {
       typeof window.AndroidBridge.getNativeBuildSignature === "function"
     ) {
       const sig = window.AndroidBridge.getNativeBuildSignature();
-      if (sig && typeof sig === "string") {
+      if (sig && typeof sig && typeof sig === "string") {
         // Signature format in v0.2.1+: "v<versionName>_<lastUpdateTime>"
         return sig.split("_")[0].replace(/^v/i, "").trim() || APP_VERSION;
       }
@@ -1903,10 +1982,10 @@ function updateAboutChannelBadge() {
       }
     }
   } else {
-    badge.textContent = "Built-in";
-    badge.className = "channel-badge native";
+    badge.textContent = IS_WEB_HOSTED ? "Web App" : "Built-in";
+    badge.className = IS_WEB_HOSTED ? "channel-badge stable" : "channel-badge native";
     if (verBadge) {
-      verBadge.textContent = formatVersionTag(NATIVE_APP_VERSION);
+      verBadge.textContent = formatVersionTag(IS_WEB_HOSTED ? APP_VERSION : NATIVE_APP_VERSION);
     }
     if (verNote) {
       verNote.classList.add("hidden");
@@ -2270,12 +2349,14 @@ function showManualUpdateModal(info) {
     ? info.installedChannel === "unstable"
       ? "Testing Build"
       : "Live Update"
-    : "Built-in";
+    : IS_WEB_HOSTED
+      ? "Web App"
+      : "Built-in";
 
   if (modalTitle) modalTitle.textContent = "Update Center";
   if (modalMsg) {
     modalMsg.textContent =
-      NATIVE_APP_VERSION !== APP_VERSION
+      !IS_WEB_HOSTED && NATIVE_APP_VERSION !== APP_VERSION
         ? `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel}) • Base Android app: ${formatVersionTag(NATIVE_APP_VERSION)}`
         : `Current version: ${formatVersionTag(APP_VERSION)} (${activeChannelLabel})`;
   }
@@ -2285,7 +2366,25 @@ function showManualUpdateModal(info) {
   const nativeMeta = $("manual-native-meta");
   const nativeBtn = $("manual-native-btn");
 
-  if (info.hasNativeUpdate) {
+  if (IS_WEB_HOSTED) {
+    if (nativeBadge) {
+      nativeBadge.textContent = info.apkAsset ? "Android APK" : "Releases";
+      nativeBadge.className = "channel-badge stable";
+    }
+    if (nativeMeta) {
+      nativeMeta.textContent = info.apkAsset
+        ? `${formatVersionTag(info.latestTag)} • ${formatAssetMeta(info.apkAsset)}`
+        : `Latest release: ${formatVersionTag(info.latestTag)}`;
+    }
+    if (nativeBtn) {
+      nativeBtn.classList.remove("hidden");
+      nativeBtn.textContent = "Get App";
+      nativeBtn.onclick = () => {
+        closeUpdateModal();
+        openExternalReleaseUrl(info.apkAsset?.browser_download_url || info.releaseUrl);
+      };
+    }
+  } else if (info.hasNativeUpdate) {
     if (nativeBadge) {
       nativeBadge.textContent = "Update Available";
       nativeBadge.className = "channel-badge stable";
@@ -2321,7 +2420,24 @@ function showManualUpdateModal(info) {
   const stableMeta = $("manual-stable-meta");
   const stableBtn = $("manual-stable-btn");
 
-  if (!info.stableAsset) {
+  if (IS_WEB_HOSTED && !info.hasInstalledBundle) {
+    if (stableBadge) {
+      stableBadge.textContent = "Live on Web";
+      stableBadge.className = "channel-badge installed";
+    }
+    if (stableMeta) {
+      stableMeta.textContent = "Updates automatically via Firebase Hosting";
+    }
+    if (stableBtn) {
+      stableBtn.disabled = false;
+      stableBtn.className = "btn-ghost update-channel-btn";
+      stableBtn.textContent = "Reload";
+      stableBtn.onclick = () => {
+        closeUpdateModal();
+        window.location.reload();
+      };
+    }
+  } else if (!info.stableAsset) {
     if (stableBadge) {
       stableBadge.textContent = "Unavailable";
       stableBadge.className = "channel-badge native";
@@ -2456,7 +2572,9 @@ function getLocalBundleSummary() {
     ? installedChannel === "unstable"
       ? "Testing Build"
       : "Live Update"
-    : "Built-in";
+    : IS_WEB_HOSTED
+      ? "Web App"
+      : "Built-in";
   return { hasInstalledBundle, installedChannel, activeChannelLabel };
 }
 
@@ -2464,7 +2582,9 @@ function bindRevertNativeButton(hasInstalledBundle) {
   const revertBtn = $("manual-revert-native-btn");
   if (!revertBtn) return;
   revertBtn.classList.toggle("hidden", !hasInstalledBundle);
-  revertBtn.textContent = `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
+  revertBtn.textContent = IS_WEB_HOSTED
+    ? `Reset to Hosted Web App (${formatVersionTag(APP_VERSION)})`
+    : `Reset to Original App Version (${formatVersionTag(NATIVE_APP_VERSION)})`;
   revertBtn.onclick = () => {
     try {
       localStorage.removeItem("budgelist-bundle-app-js");
@@ -2962,7 +3082,10 @@ async function checkForAppUpdates(isStartup = false, silent = false) {
     }
   }
 
-  // Startup Background Check
+  // Startup Background Check (Native Android only — Web App always serves latest from Firebase Hosting)
+  if (IS_WEB_HOSTED) {
+    return false;
+  }
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     return false;
   }
@@ -4051,6 +4174,9 @@ function closeExpenseSheet() {
 }
 
 addBtn.addEventListener("click", () => openExpenseSheet(null));
+if ($("add-expense-inline-btn")) {
+  $("add-expense-inline-btn").addEventListener("click", () => openExpenseSheet(null));
+}
 $("cancel-add").addEventListener("click", closeExpenseSheet);
 
 // ---------- Recurring bills ----------
@@ -4971,6 +5097,7 @@ function changeMonth(delta) {
   if (next < min || next > max) return;
   viewDate = next;
   selectedDateISO = null;
+  expenseCurrentPage = 1;
   const grid = $("calendar-grid-days");
   if (grid) grid.classList.add("animate-enter");
   render();
@@ -4982,6 +5109,7 @@ function changeDay(delta) {
   if (nextDate < min || nextDate > max) return;
   viewDate = startOfMonth(nextDate);
   selectedDateISO = toLocalISO(nextDate);
+  expenseCurrentPage = 1;
   const grid = $("calendar-grid-days");
   if (grid) grid.classList.add("animate-enter");
   render();
@@ -5866,6 +5994,7 @@ function renderExpenseCategoryFilterChips(monthExpenses) {
   allChip.textContent = `All (${monthExpenses.length})`;
   allChip.addEventListener("click", () => {
     expenseCategoryFilter = "ALL";
+    expenseCurrentPage = 1;
     renderExpenseList(monthExpenses);
   });
   frag.appendChild(allChip);
@@ -5883,12 +6012,90 @@ function renderExpenseCategoryFilterChips(monthExpenses) {
     chip.appendChild(label);
     chip.addEventListener("click", () => {
       expenseCategoryFilter = expenseCategoryFilter === cat ? "ALL" : cat;
+      expenseCurrentPage = 1;
       renderExpenseList(monthExpenses);
     });
     frag.appendChild(chip);
   });
 
   filterWrap.appendChild(frag);
+}
+
+function renderExpensePaginationControls(totalItems, totalPages, monthExpenses) {
+  const pagEl = $("expense-pagination");
+  if (!pagEl) return;
+
+  if (totalPages <= 1 || totalItems === 0 || expensePageSize <= 0) {
+    pagEl.classList.add("hidden");
+    pagEl.innerHTML = "";
+    return;
+  }
+
+  pagEl.classList.remove("hidden");
+  pagEl.innerHTML = "";
+
+  const startIdx = (expenseCurrentPage - 1) * expensePageSize + 1;
+  const endIdx = Math.min(totalItems, expenseCurrentPage * expensePageSize);
+
+  const infoSpan = document.createElement("span");
+  infoSpan.className = "expense-page-info";
+  infoSpan.innerHTML = `Showing <strong>${startIdx}–${endIdx}</strong> of <strong>${totalItems}</strong>`;
+
+  const navWrap = document.createElement("div");
+  navWrap.className = "expense-page-nav";
+
+  const makePageBtn = (label, targetPage, isActive = false, isDisabled = false, ariaLabel = "") => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `expense-page-btn${isActive ? " active" : ""}`;
+    btn.textContent = label;
+    btn.disabled = isDisabled;
+    if (ariaLabel) btn.setAttribute("aria-label", ariaLabel);
+    if (!isDisabled && !isActive) {
+      btn.addEventListener("click", () => {
+        expenseCurrentPage = targetPage;
+        renderExpenseList(monthExpenses);
+      });
+    }
+    return btn;
+  };
+
+  navWrap.appendChild(
+    makePageBtn("‹", expenseCurrentPage - 1, false, expenseCurrentPage <= 1, "Previous page")
+  );
+
+  const pagesToShow = [];
+  if (totalPages <= 5) {
+    for (let p = 1; p <= totalPages; p++) pagesToShow.push(p);
+  } else {
+    pagesToShow.push(1);
+    if (expenseCurrentPage > 3) pagesToShow.push("...");
+    const startP = Math.max(2, expenseCurrentPage - 1);
+    const endP = Math.min(totalPages - 1, expenseCurrentPage + 1);
+    for (let p = startP; p <= endP; p++) pagesToShow.push(p);
+    if (expenseCurrentPage < totalPages - 2) pagesToShow.push("...");
+    pagesToShow.push(totalPages);
+  }
+
+  pagesToShow.forEach((p) => {
+    if (p === "...") {
+      const dots = document.createElement("span");
+      dots.className = "expense-page-ellipsis";
+      dots.textContent = "…";
+      navWrap.appendChild(dots);
+    } else {
+      navWrap.appendChild(
+        makePageBtn(String(p), p, p === expenseCurrentPage, false, `Page ${p}`)
+      );
+    }
+  });
+
+  navWrap.appendChild(
+    makePageBtn("›", expenseCurrentPage + 1, false, expenseCurrentPage >= totalPages, "Next page")
+  );
+
+  pagEl.appendChild(infoSpan);
+  pagEl.appendChild(navWrap);
 }
 
 function renderExpenseList(monthExpenses) {
@@ -5924,14 +6131,40 @@ function renderExpenseList(monthExpenses) {
   container.className = `expense-list view-${effectiveMode}`;
   container.innerHTML = "";
 
-  if (sorted.length === 0) return;
+  if (sorted.length === 0) {
+    renderExpensePaginationControls(0, 0, monthExpenses);
+    return;
+  }
+
+  // Paginate sorted items based on user setting (0 = show all)
+  const totalItems = sorted.length;
+  const totalPages = expensePageSize > 0 ? Math.max(1, Math.ceil(totalItems / expensePageSize)) : 1;
+  if (expenseCurrentPage > totalPages) expenseCurrentPage = totalPages;
+  if (expenseCurrentPage < 1) expenseCurrentPage = 1;
+
+  const pageItems =
+    expensePageSize > 0
+      ? sorted.slice((expenseCurrentPage - 1) * expensePageSize, expenseCurrentPage * expensePageSize)
+      : sorted;
+
+  // Compute full-day totals across the entire filtered month so grouped day headers remain accurate across page splits
+  const fullDayStats = new Map();
+  sorted.forEach((e) => {
+    const key = e.dateISO || "unknown";
+    if (!fullDayStats.has(key)) {
+      fullDayStats.set(key, { total: 0, count: 0 });
+    }
+    const st = fullDayStats.get(key);
+    st.total = round2(st.total + (Number(e.amount) || 0));
+    st.count += 1;
+  });
 
   const fragment = document.createDocumentFragment();
 
   if (effectiveMode === "grouped") {
     const groups = [];
     const groupMap = new Map();
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const key = e.dateISO || "unknown";
       if (!groupMap.has(key)) {
         const g = { dateISO: key, items: [], total: 0 };
@@ -5959,9 +6192,13 @@ function renderExpenseList(monthExpenses) {
       titleSpan.className = "expense-day-title";
       titleSpan.textContent = formatExpenseDayGroupLabel(g.dateISO);
 
+      const fullSt = fullDayStats.get(g.dateISO);
       const countSpan = document.createElement("span");
       countSpan.className = "expense-day-count";
-      countSpan.textContent = `· ${g.items.length}`;
+      countSpan.textContent =
+        fullSt && fullSt.count > g.items.length
+          ? `· ${g.items.length} of ${fullSt.count}`
+          : `· ${g.items.length}`;
 
       titleWrap.appendChild(titleSpan);
       titleWrap.appendChild(countSpan);
@@ -5971,7 +6208,7 @@ function renderExpenseList(monthExpenses) {
 
       const totalSpan = document.createElement("span");
       totalSpan.className = "expense-day-total";
-      totalSpan.textContent = fmt(g.total);
+      totalSpan.textContent = fmt(fullSt ? fullSt.total : g.total);
 
       const chevSpan = document.createElement("span");
       chevSpan.className = "day-group-chevron";
@@ -6057,7 +6294,7 @@ function renderExpenseList(monthExpenses) {
       fragment.appendChild(groupLi);
     });
   } else if (effectiveMode === "compact") {
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const li = document.createElement("li");
       li.dataset.id = e.id;
 
@@ -6109,7 +6346,7 @@ function renderExpenseList(monthExpenses) {
     });
   } else {
     // Grid Cards Mode
-    sorted.forEach((e) => {
+    pageItems.forEach((e) => {
       const li = document.createElement("li");
       li.dataset.id = e.id;
       const color = catColor(e.category);
@@ -6169,6 +6406,7 @@ function renderExpenseList(monthExpenses) {
   }
 
   container.appendChild(fragment);
+  renderExpensePaginationControls(totalItems, totalPages, monthExpenses);
 }
 
 function formatOrdinalDay(day) {
@@ -7147,3 +7385,97 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
+
+// Close sheets and modal dialogs when clicking/tapping directly on the backdrop outside the popup card
+let backdropPointerDownTarget = null;
+document.addEventListener("pointerdown", (e) => {
+  backdropPointerDownTarget = e.target;
+});
+
+document.addEventListener("click", (e) => {
+  const target = e.target;
+  if (!target || !target.classList) return;
+
+  // Ensure the press started on the backdrop itself (prevents closing when dragging text selection out of an input)
+  if (backdropPointerDownTarget && backdropPointerDownTarget !== target) {
+    backdropPointerDownTarget = null;
+    return;
+  }
+  backdropPointerDownTarget = null;
+
+  if (!target.classList.contains("sheet") && !target.classList.contains("modal-overlay")) {
+    return;
+  }
+
+  // If a child dropdown or date picker inside the sheet is open, close that inner layer first
+  const openSelects = document.querySelectorAll(".custom-select-wrapper.open");
+  if (openSelects.length > 0) {
+    closeAllCustomSelects();
+    return;
+  }
+  if (isOverlayVisible("expense-date-popover")) {
+    closeExpenseCalendar();
+    return;
+  }
+
+  switch (target.id) {
+    case "add-sheet":
+      closeExpenseSheet();
+      break;
+    case "recurring-sheet":
+      closeRecurringSheet();
+      break;
+    case "budget-sheet":
+      if ($("cancel-budget")) $("cancel-budget").click();
+      else target.classList.add("hidden");
+      break;
+    case "global-budget-sheet":
+      closeGlobalBudgetSheet();
+      break;
+    case "overbudget-sheet":
+      closeOverbudgetSheet();
+      break;
+    case "unlock-past-sheet":
+      closeUnlockPastSheet();
+      break;
+    case "settings-sheet":
+      closeSettingsSheet();
+      break;
+    case "guest-modal":
+    case "logout-modal":
+    case "avatar-modal":
+      target.classList.add("hidden");
+      break;
+    case "network-modal":
+      if ($("cancel-network")) $("cancel-network").click();
+      else target.classList.add("hidden");
+      break;
+    case "password-modal":
+      if ($("cancel-password")) $("cancel-password").click();
+      else target.classList.add("hidden");
+      break;
+    case "email-modal":
+      if ($("cancel-email")) $("cancel-email").click();
+      else target.classList.add("hidden");
+      break;
+    case "currency-modal":
+      target.classList.add("hidden");
+      currencyOpenedDirectly = false;
+      break;
+    case "update-modal": {
+      const isStartupView = isOverlayVisible("update-startup-view");
+      if (isStartupView && pendingStartupUpdate && pendingStartupUpdate.isForced) {
+        return;
+      }
+      if (isStartupView && $("cancel-update-btn")) {
+        $("cancel-update-btn").click();
+      } else {
+        closeUpdateModal();
+      }
+      break;
+    }
+    default:
+      break;
+  }
+});
+
