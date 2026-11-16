@@ -126,6 +126,13 @@ function buildAll(checkOnly = false) {
     if (currentWwwJs !== bundledJs || currentWwwCss !== bundledCss || currentWwwHtml !== indexHtml) {
       throw new Error("www/ is out of sync with src/. Run `npm run build`.");
     }
+    const srcFavicon = path.join(SRC_DIR, "favicon.svg");
+    const currentFavicon = path.join(WWW_DIR, "favicon.svg");
+    if (fs.existsSync(srcFavicon)) {
+      if (!fs.existsSync(currentFavicon) || fs.readFileSync(srcFavicon, "utf8") !== fs.readFileSync(currentFavicon, "utf8")) {
+        throw new Error("www/favicon.svg is out of sync with src/favicon.svg. Run `npm run build`.");
+      }
+    }
     console.log("[check] src/ -> www/ parity and OTA syntax verified.");
     return;
   }
@@ -135,11 +142,16 @@ function buildAll(checkOnly = false) {
   fs.writeFileSync(path.join(WWW_DIR, "style.css"), bundledCss, "utf8");
   fs.writeFileSync(path.join(WWW_DIR, "index.html"), indexHtml, "utf8");
 
+  const srcFavicon = path.join(SRC_DIR, "favicon.svg");
+  if (fs.existsSync(srcFavicon)) {
+    fs.copyFileSync(srcFavicon, path.join(WWW_DIR, "favicon.svg"));
+  }
+
   // Mirror www/ to android/app/src/main/assets/public/ if directory exists or parent exists
   const androidAssetsParent = path.dirname(ANDROID_PUBLIC_DIR);
   if (fs.existsSync(androidAssetsParent)) {
     fs.mkdirSync(ANDROID_PUBLIC_DIR, { recursive: true });
-    for (const file of ["app.js", "style.css", "index.html", "firebase-config.js", "firebase-config.example.js"]) {
+    for (const file of ["app.js", "style.css", "index.html", "favicon.svg", "firebase-config.js", "firebase-config.example.js"]) {
       const srcFile = path.join(WWW_DIR, file);
       if (fs.existsSync(srcFile)) {
         fs.copyFileSync(srcFile, path.join(ANDROID_PUBLIC_DIR, file));
