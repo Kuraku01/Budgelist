@@ -68,7 +68,7 @@ jobs:
       - name: Package Web Assets Bundle (${{ steps.get_version.outputs.zip_name }})
         run: |
           cd www
-          zip -r "../${{ steps.get_version.outputs.zip_name }}" app.js style.css index.html favicon.svg firebase-config.js lib/
+          zip -r "../${{ steps.get_version.outputs.zip_name }}" app.js style.css index.html favicon.svg dev-profile.jpg firebase-config.js lib/
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2

@@ -623,6 +623,11 @@ function closeTopmostOverlayLayer() {
     return true;
   }
 
+  if (isOverlayVisible("dev-profile-modal")) {
+    $("dev-profile-modal").classList.add("hidden");
+    return true;
+  }
+
   // 4. Bottom Sheets (ordered from nested/secondary sheets down to base sheets)
   if (isOverlayVisible("overbudget-sheet")) {
     closeOverbudgetSheet();
@@ -766,6 +771,7 @@ document.addEventListener("click", (e) => {
     case "guest-modal":
     case "logout-modal":
     case "avatar-modal":
+    case "dev-profile-modal":
       target.classList.add("hidden");
       break;
     case "network-modal":
