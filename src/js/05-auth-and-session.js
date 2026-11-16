@@ -39,6 +39,7 @@ function setAuthMode(mode) {
   if (mode === "login") {
     usernameFieldWrap.classList.add("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.remove("hidden");
+    if ($("login-forgot-row")) $("login-forgot-row").classList.remove("hidden");
     authIdLabel.textContent = "Email or Username";
     $("auth-id").placeholder = "";
     mainAuthBtn.textContent = "Log in";
@@ -49,6 +50,7 @@ function setAuthMode(mode) {
   } else {
     usernameFieldWrap.classList.remove("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.add("hidden");
+    if ($("login-forgot-row")) $("login-forgot-row").classList.add("hidden");
     authIdLabel.textContent = "Email";
     $("auth-id").placeholder = "you@example.com";
     mainAuthBtn.textContent = "Create account";

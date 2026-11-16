@@ -335,15 +335,10 @@ label {
   margin: 14px 0 6px;
 }
 
-.auth-password-label-wrap {
+.auth-forgot-row {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 14px 0 6px;
-}
-
-.auth-password-label-wrap label {
-  margin: 0;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 
 input {
