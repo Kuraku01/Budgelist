@@ -120,10 +120,15 @@ $("cancel-password").addEventListener("click", () => passwordModal.classList.add
 
 $("password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submitBtn = $("submit-password-btn");
+  if (submitBtn && submitBtn.disabled) return;
   $("password-error").textContent = "";
-  const oldPass = $("old-password").value;
-  const newPass = $("new-password").value;
+  const oldPassInput = $("old-password");
+  const newPassInput = $("new-password");
+  const oldPass = oldPassInput.value;
+  const newPass = newPassInput.value;
 
+  setButtonBusy(submitBtn, "Updating...");
   try {
     const user = auth.currentUser;
     if (!user || !user.email) return;
@@ -133,7 +138,14 @@ $("password-form").addEventListener("submit", async (e) => {
     passwordModal.classList.add("hidden");
     showToast("Password updated successfully!");
   } catch (err) {
-    $("password-error").textContent = humanAuthError(err.code) || "Incorrect current password.";
+    triggerErrorFeedback(
+      $("password-error"),
+      humanAuthError(err.code) || "Incorrect current password.",
+      null,
+      [oldPassInput]
+    );
+  } finally {
+    clearButtonBusy(submitBtn);
   }
 });
 
@@ -234,12 +246,16 @@ $("cancel-email").addEventListener("click", () => emailModal.classList.add("hidd
 
 $("email-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submitBtn = $("submit-email-btn");
+  if (submitBtn && submitBtn.disabled) return;
   $("email-error").textContent = "";
-  const newEmail = $("new-email").value.trim();
-  const password = $("email-password").value;
+  const newEmailInput = $("new-email");
+  const passInput = $("email-password");
+  const newEmail = newEmailInput.value.trim();
+  const password = passInput.value;
 
   if (!newEmail || !newEmail.includes("@")) {
-    $("email-error").textContent = "Please enter a valid email address.";
+    triggerErrorFeedback($("email-error"), "Please enter a valid email address.", null, [newEmailInput]);
     return;
   }
 
@@ -253,6 +269,7 @@ $("email-form").addEventListener("submit", async (e) => {
   }
 
   isUpdatingEmail = true;
+  setButtonBusy(submitBtn, "Updating...");
 
   const pendingKey = `budgelist-pending-email-change-${user.uid}`;
   safeSet(pendingKey, JSON.stringify({
@@ -306,9 +323,15 @@ $("email-form").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     console.error("Email update error:", err);
-    $("email-error").textContent = humanAuthError(err.code) || err.message || "Could not update email.";
+    triggerErrorFeedback(
+      $("email-error"),
+      humanAuthError(err.code) || err.message || "Could not update email.",
+      null,
+      [passInput]
+    );
   } finally {
     isUpdatingEmail = false;
+    clearButtonBusy(submitBtn);
   }
 });
 
@@ -464,6 +487,9 @@ $("execute-convert-btn").addEventListener("click", () => {
 });
 
 async function convertCurrencyTo(targetCurrency) {
+  const execBtn = $("execute-convert-btn");
+  if (execBtn && execBtn.disabled) return;
+
   const fromCode = getCurrentCurrencyCode();
   const fromSymbol = currencySymbol;
 
@@ -472,14 +498,15 @@ async function convertCurrencyTo(targetCurrency) {
     return;
   }
 
+  setButtonBusy(execBtn, "Fetching rate...");
   showToast(`Fetching exchange rates for ${fromCode} → ${targetCurrency}...`);
-  const online = await checkNetworkConnection();
-  if (!online) {
-    showToast("Offline. Cannot fetch live exchange rates.");
-    return;
-  }
-
   try {
+    const online = await checkNetworkConnection();
+    if (!online) {
+      showToast("Offline. Cannot fetch live exchange rates.");
+      return;
+    }
+
     let rate = null;
 
     // 1. Try direct base rate API
@@ -561,7 +588,10 @@ async function convertCurrencyTo(targetCurrency) {
     currencyModal.classList.add("hidden");
     showToast(`Converted ${fromCode} (${fromSymbol}) → ${targetCurrency} (${currencySymbol})!`);
   } catch (e) {
+    triggerErrorFeedback(null, "Exchange rate service unavailable", currencyModal.querySelector(".modal-card"));
     showToast("Exchange rate service unavailable. Try again later.");
+  } finally {
+    clearButtonBusy(execBtn);
   }
 }
 

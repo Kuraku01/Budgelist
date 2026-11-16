@@ -60,6 +60,49 @@ async function checkAuthScreenNetwork() {
   }
 }
 
+function setButtonBusy(btn, busyText = "Loading...") {
+  if (!btn) return;
+  if (!btn.dataset.origHtml) {
+    btn.dataset.origHtml = btn.innerHTML;
+  }
+  btn.disabled = true;
+  btn.classList.add("is-busy");
+  btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${ busyText }</span>`;
+}
+
+function clearButtonBusy(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.classList.remove("is-busy");
+  if (btn.dataset.origHtml != null) {
+    btn.innerHTML = btn.dataset.origHtml;
+    delete btn.dataset.origHtml;
+  }
+}
+
+function triggerErrorFeedback(errorEl, message, cardEl = null, inputEls = []) {
+  if (errorEl) {
+    errorEl.textContent = message || "";
+  }
+  const targetCard = cardEl || (errorEl ? errorEl.closest(".auth-card, .modal-card") : null);
+  if (targetCard && message) {
+    targetCard.classList.remove("shake-error");
+    void targetCard.offsetWidth;
+    targetCard.classList.add("shake-error");
+  }
+  if (Array.isArray(inputEls)) {
+    inputEls.forEach((inp) => {
+      if (!inp) return;
+      inp.classList.add("input-error");
+      const clearErr = () => {
+        inp.classList.remove("input-error");
+        inp.removeEventListener("input", clearErr);
+      };
+      inp.addEventListener("input", clearErr);
+    });
+  }
+}
+
 function showScreen(screenId) {
   const loadingScreen = $("loading-screen");
   const authScreenEl = $("auth-screen");

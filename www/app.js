@@ -60,6 +60,49 @@ async function checkAuthScreenNetwork() {
   }
 }
 
+function setButtonBusy(btn, busyText = "Loading...") {
+  if (!btn) return;
+  if (!btn.dataset.origHtml) {
+    btn.dataset.origHtml = btn.innerHTML;
+  }
+  btn.disabled = true;
+  btn.classList.add("is-busy");
+  btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${ busyText }</span>`;
+}
+
+function clearButtonBusy(btn) {
+  if (!btn) return;
+  btn.disabled = false;
+  btn.classList.remove("is-busy");
+  if (btn.dataset.origHtml != null) {
+    btn.innerHTML = btn.dataset.origHtml;
+    delete btn.dataset.origHtml;
+  }
+}
+
+function triggerErrorFeedback(errorEl, message, cardEl = null, inputEls = []) {
+  if (errorEl) {
+    errorEl.textContent = message || "";
+  }
+  const targetCard = cardEl || (errorEl ? errorEl.closest(".auth-card, .modal-card") : null);
+  if (targetCard && message) {
+    targetCard.classList.remove("shake-error");
+    void targetCard.offsetWidth;
+    targetCard.classList.add("shake-error");
+  }
+  if (Array.isArray(inputEls)) {
+    inputEls.forEach((inp) => {
+      if (!inp) return;
+      inp.classList.add("input-error");
+      const clearErr = () => {
+        inp.classList.remove("input-error");
+        inp.removeEventListener("input", clearErr);
+      };
+      inp.addEventListener("input", clearErr);
+    });
+  }
+}
+
 function showScreen(screenId) {
   const loadingScreen = $("loading-screen");
   const authScreenEl = $("auth-screen");
@@ -1342,10 +1385,15 @@ $("cancel-password").addEventListener("click", () => passwordModal.classList.add
 
 $("password-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submitBtn = $("submit-password-btn");
+  if (submitBtn && submitBtn.disabled) return;
   $("password-error").textContent = "";
-  const oldPass = $("old-password").value;
-  const newPass = $("new-password").value;
+  const oldPassInput = $("old-password");
+  const newPassInput = $("new-password");
+  const oldPass = oldPassInput.value;
+  const newPass = newPassInput.value;
 
+  setButtonBusy(submitBtn, "Updating...");
   try {
     const user = auth.currentUser;
     if (!user || !user.email) return;
@@ -1355,7 +1403,14 @@ $("password-form").addEventListener("submit", async (e) => {
     passwordModal.classList.add("hidden");
     showToast("Password updated successfully!");
   } catch (err) {
-    $("password-error").textContent = humanAuthError(err.code) || "Incorrect current password.";
+    triggerErrorFeedback(
+      $("password-error"),
+      humanAuthError(err.code) || "Incorrect current password.",
+      null,
+      [oldPassInput]
+    );
+  } finally {
+    clearButtonBusy(submitBtn);
   }
 });
 
@@ -1456,12 +1511,16 @@ $("cancel-email").addEventListener("click", () => emailModal.classList.add("hidd
 
 $("email-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const submitBtn = $("submit-email-btn");
+  if (submitBtn && submitBtn.disabled) return;
   $("email-error").textContent = "";
-  const newEmail = $("new-email").value.trim();
-  const password = $("email-password").value;
+  const newEmailInput = $("new-email");
+  const passInput = $("email-password");
+  const newEmail = newEmailInput.value.trim();
+  const password = passInput.value;
 
   if (!newEmail || !newEmail.includes("@")) {
-    $("email-error").textContent = "Please enter a valid email address.";
+    triggerErrorFeedback($("email-error"), "Please enter a valid email address.", null, [newEmailInput]);
     return;
   }
 
@@ -1475,6 +1534,7 @@ $("email-form").addEventListener("submit", async (e) => {
   }
 
   isUpdatingEmail = true;
+  setButtonBusy(submitBtn, "Updating...");
 
   const pendingKey = `budgelist-pending-email-change-${user.uid}`;
   safeSet(pendingKey, JSON.stringify({
@@ -1528,9 +1588,15 @@ $("email-form").addEventListener("submit", async (e) => {
     }
   } catch (err) {
     console.error("Email update error:", err);
-    $("email-error").textContent = humanAuthError(err.code) || err.message || "Could not update email.";
+    triggerErrorFeedback(
+      $("email-error"),
+      humanAuthError(err.code) || err.message || "Could not update email.",
+      null,
+      [passInput]
+    );
   } finally {
     isUpdatingEmail = false;
+    clearButtonBusy(submitBtn);
   }
 });
 
@@ -1686,6 +1752,9 @@ $("execute-convert-btn").addEventListener("click", () => {
 });
 
 async function convertCurrencyTo(targetCurrency) {
+  const execBtn = $("execute-convert-btn");
+  if (execBtn && execBtn.disabled) return;
+
   const fromCode = getCurrentCurrencyCode();
   const fromSymbol = currencySymbol;
 
@@ -1694,14 +1763,15 @@ async function convertCurrencyTo(targetCurrency) {
     return;
   }
 
+  setButtonBusy(execBtn, "Fetching rate...");
   showToast(`Fetching exchange rates for ${fromCode} → ${targetCurrency}...`);
-  const online = await checkNetworkConnection();
-  if (!online) {
-    showToast("Offline. Cannot fetch live exchange rates.");
-    return;
-  }
-
   try {
+    const online = await checkNetworkConnection();
+    if (!online) {
+      showToast("Offline. Cannot fetch live exchange rates.");
+      return;
+    }
+
     let rate = null;
 
     // 1. Try direct base rate API
@@ -1783,7 +1853,10 @@ async function convertCurrencyTo(targetCurrency) {
     currencyModal.classList.add("hidden");
     showToast(`Converted ${fromCode} (${fromSymbol}) → ${targetCurrency} (${currencySymbol})!`);
   } catch (e) {
+    triggerErrorFeedback(null, "Exchange rate service unavailable", currencyModal.querySelector(".modal-card"));
     showToast("Exchange rate service unavailable. Try again later.");
+  } finally {
+    clearButtonBusy(execBtn);
   }
 }
 
@@ -2034,6 +2107,16 @@ function updateAboutChannelBadge() {
     if (verNote) {
       verNote.classList.add("hidden");
     }
+  }
+
+  // On hosted Web App, repurpose "Check for updates" into "Download Android App" with the Android logo
+  if (IS_WEB_HOSTED) {
+    const syncIcon = $("check-update-sync-icon");
+    const androidIcon = $("check-update-android-icon");
+    const btnLabel = $("check-update-btn-label");
+    if (syncIcon) syncIcon.classList.add("hidden");
+    if (androidIcon) androidIcon.classList.remove("hidden");
+    if (btnLabel) btnLabel.textContent = "Download Android App";
   }
 }
 
@@ -3436,18 +3519,112 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   return false;
 }
 
-$("check-update-btn").addEventListener("click", () => {
+$("check-update-btn").addEventListener("click", async () => {
+  const btn = $("check-update-btn");
+  if (IS_WEB_HOSTED) {
+    if (btn && btn.disabled) return;
+    setButtonBusy(btn, "Preparing APK download...");
+    try {
+      const cleanVer = APP_VERSION.replace(/^v/i, "").trim();
+      let apkUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${cleanVer}/Budgelist_${cleanVer}.apk`;
+      const latest = await fetchLatestRelease(true, { allowStaleFallback: true });
+      if (latest) {
+        const info = inspectReleaseAssets(latest);
+        if (info.apkAsset && info.apkAsset.browser_download_url) {
+          apkUrl = info.apkAsset.browser_download_url;
+        } else if (info.releaseUrl) {
+          apkUrl = info.releaseUrl;
+        }
+      }
+      openExternalReleaseUrl(apkUrl);
+      showToast("Downloading Budgelist for Android...");
+    } catch (e) {
+      openExternalReleaseUrl(`https://github.com/${GITHUB_REPO}/releases`);
+    } finally {
+      clearButtonBusy(btn);
+    }
+    return;
+  }
   checkForAppUpdates(false, false);
 });
 
+// ---------- What's New Paginated Popup Modal ----------
+let whatsNewCurrentPage = 0;
+
+function renderWhatsNewPage(pageIdx) {
+  const pages = Array.from(document.querySelectorAll("#whats-new-pages-wrap .whats-new-page"));
+  if (pages.length === 0) return;
+
+  const total = pages.length;
+  whatsNewCurrentPage = Math.max(0, Math.min(total - 1, pageIdx));
+
+  pages.forEach((p, idx) => {
+    p.classList.toggle("hidden", idx !== whatsNewCurrentPage);
+  });
+
+  const activePage = pages[whatsNewCurrentPage];
+  const verPill = $("whats-new-version-pill");
+  const latestTag = $("whats-new-latest-tag");
+  const pageIndicator = $("whats-new-page-indicator");
+  const prevBtn = $("whats-new-prev-btn");
+  const nextBtn = $("whats-new-next-btn");
+  const wrapEl = $("whats-new-pages-wrap");
+
+  if (activePage) {
+    if (verPill) verPill.textContent = activePage.getAttribute("data-version") || "";
+    if (latestTag) {
+      latestTag.textContent = activePage.getAttribute("data-badge") || "";
+      latestTag.className = activePage.getAttribute("data-badge-class") || "channel-badge native";
+    }
+  }
+  if (pageIndicator) {
+    pageIndicator.textContent = `Page ${whatsNewCurrentPage + 1} of ${total}`;
+  }
+  if (prevBtn) prevBtn.disabled = whatsNewCurrentPage <= 0;
+  if (nextBtn) nextBtn.disabled = whatsNewCurrentPage >= total - 1;
+  if (wrapEl) wrapEl.scrollTop = 0;
+
+  document.querySelectorAll("#whats-new-dots .whats-new-dot").forEach((dot, idx) => {
+    dot.classList.toggle("active", idx === whatsNewCurrentPage);
+  });
+}
+
+function openWhatsNewModal(initialPage = 0) {
+  const modal = $("whats-new-modal");
+  if (!modal) return;
+  renderWhatsNewPage(initialPage);
+  modal.classList.remove("hidden");
+}
+
+function closeWhatsNewModal() {
+  const modal = $("whats-new-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
 $("toggle-release-notes").addEventListener("click", () => {
-  const notes = $("release-notes-content");
-  const arrow = $("release-notes-arrow");
-  if (!notes) return;
-  const isHidden = notes.classList.contains("hidden");
-  notes.classList.toggle("hidden", !isHidden);
-  if (arrow) arrow.textContent = isHidden ? "▾" : "▸";
+  openWhatsNewModal(0);
 });
+
+if ($("close-whats-new-modal")) {
+  $("close-whats-new-modal").addEventListener("click", closeWhatsNewModal);
+}
+if ($("whats-new-prev-btn")) {
+  $("whats-new-prev-btn").addEventListener("click", () => {
+    renderWhatsNewPage(whatsNewCurrentPage - 1);
+  });
+}
+if ($("whats-new-next-btn")) {
+  $("whats-new-next-btn").addEventListener("click", () => {
+    renderWhatsNewPage(whatsNewCurrentPage + 1);
+  });
+}
+document.querySelectorAll("#whats-new-dots .whats-new-dot").forEach((dot) => {
+  dot.addEventListener("click", () => {
+    const p = parseInt(dot.getAttribute("data-page") || "0", 10);
+    renderWhatsNewPage(p);
+  });
+});
+
 
 // ---------- Password Visibility Toggle ----------
 document.querySelectorAll(".password-toggle-btn").forEach((btn) => {
@@ -3482,12 +3659,18 @@ const loginForgotPasswordBtn = $("login-forgot-password-btn");
 function setAuthMode(mode) {
   authMode = mode;
   authError.textContent = "";
+  clearButtonBusy(mainAuthBtn);
+  ["username", "auth-id", "password"].forEach((id) => {
+    const el = $(id);
+    if (el) el.classList.remove("input-error");
+  });
   if (mode === "login") {
     usernameFieldWrap.classList.add("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.remove("hidden");
     authIdLabel.textContent = "Email or Username";
     $("auth-id").placeholder = "";
     mainAuthBtn.textContent = "Log in";
+    delete mainAuthBtn.dataset.origHtml;
     toggleAuthModeBtn.textContent = "Create account";
     authTitle.textContent = "Budget, listed.";
     authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
@@ -3497,6 +3680,7 @@ function setAuthMode(mode) {
     authIdLabel.textContent = "Email";
     $("auth-id").placeholder = "you@example.com";
     mainAuthBtn.textContent = "Create account";
+    delete mainAuthBtn.dataset.origHtml;
     toggleAuthModeBtn.textContent = "Already have an account? Log in";
     authTitle.textContent = "Join Budgelist.";
     authSub.textContent = "Create an account with a unique username to securely save your budget.";
@@ -3535,11 +3719,14 @@ confirmGuest.addEventListener("click", () => {
 
 resendVerifyBtn.addEventListener("click", async () => {
   if (auth.currentUser) {
+    setButtonBusy(resendVerifyBtn, "Sending...");
     try {
       await sendEmailVerification(auth.currentUser);
       showToast("Verification email sent! Check your inbox.");
     } catch (e) {
       showToast("Could not send verification email. Try again later.");
+    } finally {
+      clearButtonBusy(resendVerifyBtn);
     }
   }
 });
@@ -3664,132 +3851,192 @@ onAuthStateChanged(auth, async (user) => {
 
 authForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (mainAuthBtn && mainAuthBtn.disabled) return;
   authError.textContent = "";
 
-  const online = await checkNetworkConnection();
-  if (!online) {
-    showNetworkModal(
-      "You need an active internet connection to log in or create an account. You can also use Guest mode offline.",
-      () => authForm.dispatchEvent(new Event("submit")),
-      () => { authError.textContent = "Offline. Connect to the internet or continue as Guest."; }
-    );
-    return;
+  const authIdInput = $("auth-id");
+  const passwordInput = $("password");
+  const usernameInput = $("username");
+  const password = passwordInput.value;
+  const identifier = authIdInput.value.trim();
+
+  if (authMode === "signup") {
+    const username = usernameInput.value.trim();
+    if (!username || username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      triggerErrorFeedback(
+        authError,
+        "Username must be 3-20 characters (letters, numbers, underscores).",
+        null,
+        [usernameInput]
+      );
+      return;
+    }
+    if (!identifier || !identifier.includes("@") || password.length < 6) {
+      triggerErrorFeedback(
+        authError,
+        "Enter a valid email and password (6+ characters).",
+        null,
+        [!identifier.includes("@") ? authIdInput : passwordInput]
+      );
+      return;
+    }
   }
 
-  const password = $("password").value;
-  const identifier = $("auth-id").value.trim();
+  setButtonBusy(mainAuthBtn, authMode === "login" ? "Signing in..." : "Creating account...");
+  if (toggleAuthModeBtn) toggleAuthModeBtn.disabled = true;
+  if (guestBtn) guestBtn.disabled = true;
 
-  if (authMode === "login") {
-    try {
-      let email = identifier;
-      if (!identifier.includes("@")) {
-        const usernameLower = identifier.toLowerCase();
+  try {
+    const online = await checkNetworkConnection();
+    if (!online) {
+      showNetworkModal(
+        "You need an active internet connection to log in or create an account. You can also use Guest mode offline.",
+        () => authForm.dispatchEvent(new Event("submit")),
+        () => {
+          triggerErrorFeedback(authError, "Offline. Connect to the internet or continue as Guest.");
+        }
+      );
+      return;
+    }
+
+    if (authMode === "login") {
+      try {
+        let email = identifier;
+        if (!identifier.includes("@")) {
+          const usernameLower = identifier.toLowerCase();
+          const uSnap = await getDoc(doc(db, "usernames", usernameLower));
+          if (!uSnap.exists()) {
+            triggerErrorFeedback(
+              authError,
+              "No account found with that username or email.",
+              null,
+              [authIdInput]
+            );
+            return;
+          }
+          email = uSnap.data().email;
+          if (uSnap.data().username) {
+            safeSet(`budgelist-user-${uSnap.data().uid || "login"}-username`, uSnap.data().username);
+          }
+        }
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        const highlightInputs =
+          err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+            ? [passwordInput]
+            : [authIdInput, passwordInput];
+        triggerErrorFeedback(authError, humanAuthError(err.code), null, highlightInputs);
+      }
+    } else {
+      const username = usernameInput.value.trim();
+      const email = identifier;
+      try {
+        const usernameLower = username.toLowerCase();
         const uSnap = await getDoc(doc(db, "usernames", usernameLower));
-        if (!uSnap.exists()) {
-          authError.textContent = "No account found with that username or email.";
+        if (uSnap.exists()) {
+          triggerErrorFeedback(
+            authError,
+            "That username is already taken. Choose another.",
+            null,
+            [usernameInput]
+          );
           return;
         }
-        email = uSnap.data().email;
-        if (uSnap.data().username) {
-          safeSet(`budgelist-user-${uSnap.data().uid || "login"}-username`, uSnap.data().username);
-        }
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+        // Update Auth profile
+        try {
+          await updateProfile(cred.user, { displayName: username, photoURL: "🦊" });
+        } catch (e) {}
+
+        // Store username mapping in Firestore
+        await setDoc(doc(db, "usernames", usernameLower), {
+          uid: cred.user.uid,
+          email: email.toLowerCase(),
+          username: username,
+        });
+
+        // Store user document in Firestore
+        await setDoc(doc(db, "users", cred.user.uid), {
+          email: email.toLowerCase(),
+          username: username,
+          avatar: "🦊",
+          name: username,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        // Local storage cache
+        safeSet(`budgelist-user-${cred.user.uid}-username`, username);
+
+        await sendEmailVerification(cred.user);
+        showToast("Account created! Please check your email for verification.");
+      } catch (err) {
+        const highlightInputs =
+          err.code === "auth/email-already-in-use" || err.code === "auth/invalid-email"
+            ? [authIdInput]
+            : [authIdInput, passwordInput];
+        triggerErrorFeedback(authError, humanAuthError(err.code), null, highlightInputs);
       }
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      authError.textContent = humanAuthError(err.code);
     }
-  } else {
-    const username = $("username").value.trim();
-    const email = identifier;
-    if (!username || username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-      authError.textContent = "Username must be 3-20 characters (letters, numbers, underscores).";
-      return;
-    }
-    if (!email || password.length < 6) {
-      authError.textContent = "Enter a valid email and password (6+ characters).";
-      return;
-    }
-    try {
-      const usernameLower = username.toLowerCase();
-      const uSnap = await getDoc(doc(db, "usernames", usernameLower));
-      if (uSnap.exists()) {
-        authError.textContent = "That username is already taken. Choose another.";
-        return;
-      }
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Update Auth profile
-      try {
-        await updateProfile(cred.user, { displayName: username, photoURL: "🦊" });
-      } catch (e) {}
-
-      // Store username mapping in Firestore
-      await setDoc(doc(db, "usernames", usernameLower), {
-        uid: cred.user.uid,
-        email: email.toLowerCase(),
-        username: username,
-      });
-
-      // Store user document in Firestore
-      await setDoc(doc(db, "users", cred.user.uid), {
-        email: email.toLowerCase(),
-        username: username,
-        avatar: "🦊",
-        name: username,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
-
-      // Local storage cache
-      safeSet(`budgelist-user-${cred.user.uid}-username`, username);
-
-      await sendEmailVerification(cred.user);
-      showToast("Account created! Please check your email for verification.");
-    } catch (err) {
-      authError.textContent = humanAuthError(err.code);
-    }
+  } finally {
+    clearButtonBusy(mainAuthBtn);
+    if (toggleAuthModeBtn) toggleAuthModeBtn.disabled = false;
+    if (guestBtn) guestBtn.disabled = false;
   }
 });
 
 if (loginForgotPasswordBtn) {
   loginForgotPasswordBtn.addEventListener("click", async () => {
+    if (loginForgotPasswordBtn.disabled) return;
     authError.textContent = "";
 
-    const online = await checkNetworkConnection();
-    if (!online) {
-      showNetworkModal(
-        "You need an active internet connection to reset your password.",
-        () => loginForgotPasswordBtn.click(),
-        () => { authError.textContent = "Offline. Connect to the internet to reset password."; }
-      );
-      return;
-    }
-
-    const identifier = $("auth-id").value.trim();
+    const authIdInput = $("auth-id");
+    const identifier = authIdInput.value.trim();
     if (!identifier) {
-      authError.textContent = "Enter your email or username above first.";
+      triggerErrorFeedback(authError, "Enter your email or username above first.", null, [authIdInput]);
       return;
     }
 
+    setButtonBusy(loginForgotPasswordBtn, "Sending...");
     try {
+      const online = await checkNetworkConnection();
+      if (!online) {
+        showNetworkModal(
+          "You need an active internet connection to reset your password.",
+          () => loginForgotPasswordBtn.click(),
+          () => {
+            triggerErrorFeedback(authError, "Offline. Connect to the internet to reset password.");
+          }
+        );
+        return;
+      }
+
       let email = identifier;
       if (!identifier.includes("@")) {
         const usernameLower = identifier.toLowerCase();
         const uSnap = await getDoc(doc(db, "usernames", usernameLower));
         if (!uSnap.exists()) {
-          authError.textContent = "No account found with that username.";
+          triggerErrorFeedback(authError, "No account found with that username.", null, [authIdInput]);
           return;
         }
         email = uSnap.data().email;
       }
       if (!email) {
-        authError.textContent = "No email found for this account.";
+        triggerErrorFeedback(authError, "No email found for this account.", null, [authIdInput]);
         return;
       }
       await sendPasswordResetEmail(auth, email);
       showToast(`Password reset email sent to ${email}`);
       authError.textContent = "";
     } catch (err) {
-      authError.textContent = humanAuthError(err.code) || "Could not send password reset email.";
+      triggerErrorFeedback(
+        authError,
+        humanAuthError(err.code) || "Could not send password reset email.",
+        null,
+        [authIdInput]
+      );
+    } finally {
+      clearButtonBusy(loginForgotPasswordBtn);
     }
   });
 }
@@ -7350,6 +7597,11 @@ function closeTopmostOverlayLayer() {
     return true;
   }
 
+  if (isOverlayVisible("whats-new-modal")) {
+    $("whats-new-modal").classList.add("hidden");
+    return true;
+  }
+
   // 4. Bottom Sheets (ordered from nested/secondary sheets down to base sheets)
   if (isOverlayVisible("overbudget-sheet")) {
     closeOverbudgetSheet();
@@ -7494,6 +7746,7 @@ document.addEventListener("click", (e) => {
     case "logout-modal":
     case "avatar-modal":
     case "dev-profile-modal":
+    case "whats-new-modal":
       target.classList.add("hidden");
       break;
     case "network-modal":

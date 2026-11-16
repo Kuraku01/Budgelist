@@ -152,6 +152,16 @@ function updateAboutChannelBadge() {
       verNote.classList.add("hidden");
     }
   }
+
+  // On hosted Web App, repurpose "Check for updates" into "Download Android App" with the Android logo
+  if (IS_WEB_HOSTED) {
+    const syncIcon = $("check-update-sync-icon");
+    const androidIcon = $("check-update-android-icon");
+    const btnLabel = $("check-update-btn-label");
+    if (syncIcon) syncIcon.classList.add("hidden");
+    if (androidIcon) androidIcon.classList.remove("hidden");
+    if (btnLabel) btnLabel.textContent = "Download Android App";
+  }
 }
 
 updateAboutChannelBadge();
@@ -1553,15 +1563,109 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   return false;
 }
 
-$("check-update-btn").addEventListener("click", () => {
+$("check-update-btn").addEventListener("click", async () => {
+  const btn = $("check-update-btn");
+  if (IS_WEB_HOSTED) {
+    if (btn && btn.disabled) return;
+    setButtonBusy(btn, "Preparing APK download...");
+    try {
+      const cleanVer = APP_VERSION.replace(/^v/i, "").trim();
+      let apkUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${cleanVer}/Budgelist_${cleanVer}.apk`;
+      const latest = await fetchLatestRelease(true, { allowStaleFallback: true });
+      if (latest) {
+        const info = inspectReleaseAssets(latest);
+        if (info.apkAsset && info.apkAsset.browser_download_url) {
+          apkUrl = info.apkAsset.browser_download_url;
+        } else if (info.releaseUrl) {
+          apkUrl = info.releaseUrl;
+        }
+      }
+      openExternalReleaseUrl(apkUrl);
+      showToast("Downloading Budgelist for Android...");
+    } catch (e) {
+      openExternalReleaseUrl(`https://github.com/${GITHUB_REPO}/releases`);
+    } finally {
+      clearButtonBusy(btn);
+    }
+    return;
+  }
   checkForAppUpdates(false, false);
 });
 
+// ---------- What's New Paginated Popup Modal ----------
+let whatsNewCurrentPage = 0;
+
+function renderWhatsNewPage(pageIdx) {
+  const pages = Array.from(document.querySelectorAll("#whats-new-pages-wrap .whats-new-page"));
+  if (pages.length === 0) return;
+
+  const total = pages.length;
+  whatsNewCurrentPage = Math.max(0, Math.min(total - 1, pageIdx));
+
+  pages.forEach((p, idx) => {
+    p.classList.toggle("hidden", idx !== whatsNewCurrentPage);
+  });
+
+  const activePage = pages[whatsNewCurrentPage];
+  const verPill = $("whats-new-version-pill");
+  const latestTag = $("whats-new-latest-tag");
+  const pageIndicator = $("whats-new-page-indicator");
+  const prevBtn = $("whats-new-prev-btn");
+  const nextBtn = $("whats-new-next-btn");
+  const wrapEl = $("whats-new-pages-wrap");
+
+  if (activePage) {
+    if (verPill) verPill.textContent = activePage.getAttribute("data-version") || "";
+    if (latestTag) {
+      latestTag.textContent = activePage.getAttribute("data-badge") || "";
+      latestTag.className = activePage.getAttribute("data-badge-class") || "channel-badge native";
+    }
+  }
+  if (pageIndicator) {
+    pageIndicator.textContent = `Page ${whatsNewCurrentPage + 1} of ${total}`;
+  }
+  if (prevBtn) prevBtn.disabled = whatsNewCurrentPage <= 0;
+  if (nextBtn) nextBtn.disabled = whatsNewCurrentPage >= total - 1;
+  if (wrapEl) wrapEl.scrollTop = 0;
+
+  document.querySelectorAll("#whats-new-dots .whats-new-dot").forEach((dot, idx) => {
+    dot.classList.toggle("active", idx === whatsNewCurrentPage);
+  });
+}
+
+function openWhatsNewModal(initialPage = 0) {
+  const modal = $("whats-new-modal");
+  if (!modal) return;
+  renderWhatsNewPage(initialPage);
+  modal.classList.remove("hidden");
+}
+
+function closeWhatsNewModal() {
+  const modal = $("whats-new-modal");
+  if (modal) modal.classList.add("hidden");
+}
+
 $("toggle-release-notes").addEventListener("click", () => {
-  const notes = $("release-notes-content");
-  const arrow = $("release-notes-arrow");
-  if (!notes) return;
-  const isHidden = notes.classList.contains("hidden");
-  notes.classList.toggle("hidden", !isHidden);
-  if (arrow) arrow.textContent = isHidden ? "▾" : "▸";
+  openWhatsNewModal(0);
 });
+
+if ($("close-whats-new-modal")) {
+  $("close-whats-new-modal").addEventListener("click", closeWhatsNewModal);
+}
+if ($("whats-new-prev-btn")) {
+  $("whats-new-prev-btn").addEventListener("click", () => {
+    renderWhatsNewPage(whatsNewCurrentPage - 1);
+  });
+}
+if ($("whats-new-next-btn")) {
+  $("whats-new-next-btn").addEventListener("click", () => {
+    renderWhatsNewPage(whatsNewCurrentPage + 1);
+  });
+}
+document.querySelectorAll("#whats-new-dots .whats-new-dot").forEach((dot) => {
+  dot.addEventListener("click", () => {
+    const p = parseInt(dot.getAttribute("data-page") || "0", 10);
+    renderWhatsNewPage(p);
+  });
+});
+

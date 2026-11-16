@@ -1789,9 +1789,11 @@
                     type="button"
                     id="check-update-btn"
                     class="btn-ghost style-btn-icon"
-                    style="width: 100%; margin: 12px 0 16px"
+                    style="width: 100%; margin: 12px 0 8px"
                   >
                     <svg
+                      id="check-update-sync-icon"
+                      class="check-update-icon"
                       width="16"
                       height="16"
                       viewBox="0 0 24 24"
@@ -1803,138 +1805,43 @@
                         d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.3"
                       />
                     </svg>
-                    Check for updates
+                    <svg
+                      id="check-update-android-icon"
+                      class="android-app-icon hidden"
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.2439 13.8533 7.8508 12 7.8508s-3.5902.3931-5.1367 1.0989L4.841 5.4467a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3435-4.1021-2.6892-7.5743-6.1185-9.4396"/>
+                    </svg>
+                    <span id="check-update-btn-label">Check for updates</span>
                   </button>
 
                   <div class="release-notes-wrap">
                     <button
                       type="button"
                       id="toggle-release-notes"
-                      class="link-btn"
-                      style="
-                        display: flex;
-                        align-items: center;
-                        justify-content: space-between;
-                        width: 100%;
-                      "
+                      class="btn-ghost style-btn-icon whats-new-trigger-btn"
                     >
-                      <span>What's New in v0.2.2-beta</span>
-                      <span id="release-notes-arrow">▸</span>
+                      <span class="whats-new-trigger-left">
+                        <svg
+                          width="15"
+                          height="15"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                        </svg>
+                        <span>What's New in v0.2.2-beta</span>
+                      </span>
+                      <span id="release-notes-arrow" class="whats-new-trigger-pill">View ▸</span>
                     </button>
-                    <div
-                      id="release-notes-content"
-                      class="release-notes-list hidden"
-                    >
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 6px 0 4px;">v0.2.2-beta</h4>
-                      <ul>
-                        <li>
-                          <strong>Live Web App &amp; Adaptive Multi-Screen Layout:</strong> Budgelist is now available on the web at <code>budgelistapp.web.app</code> with responsive phone, tablet (centered dialogs &amp; 3-column grid), and desktop (2-column split dashboard) layouts.
-                        </li>
-                        <li>
-                          <strong>Customizable Expense Pagination:</strong> Paginate long monthly expense lists and configure how many items appear per page (<code>5</code>, <code>10</code>, <code>15</code>, <code>25</code>, <code>50</code>, or <code>All</code>) in <strong>Settings &rarr; Appearance</strong>.
-                        </li>
-                        <li>
-                          <strong>UI Zoom Presets:</strong> Scale text, cards, and controls between <code>80%</code> and <code>120%</code> in <strong>Settings &rarr; Appearance</strong> without changing your active phone, tablet, or desktop layout.
-                        </li>
-                        <li>
-                          <strong>Click-Outside Popup Dismissal:</strong> Tap or click outside any open bottom sheet or modal dialog to close it immediately.
-                        </li>
-                        <li>
-                          <strong>Modular Source Architecture:</strong> Refactored the codebase into modular <code>src/</code> packages for faster builds and updates.
-                        </li>
-                      </ul>
-
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.2.1-beta</h4>
-                      <ul>
-                        <li>
-                          <strong>Redesigned Overview &amp; Spent Progress Bar:</strong> Clear separation between your Budget Pool and Monthly Spending, relocated Currency &amp; Month Budget controls, and an upgraded Spent bar with end-value labels and a live current-spent marker.
-                        </li>
-                        <li>
-                          <strong>Interactive Help Tooltips:</strong> Tap or hover <code>?</code> badges across Overview, Analytics, Bills, Budgets, and Settings for plain-language explanations.
-                        </li>
-                        <li>
-                          <strong>Multi-View Expenses &amp; Recurring Bills:</strong> Switch between Grouped-by-Day/Detailed, Compact, and Grid layouts, filter expenses by category, and step day-by-day or month-by-month from the top bar.
-                        </li>
-                        <li>
-                          <strong>Multi-Layer Android Back Navigation &amp; Logout Confirmation:</strong> Back gestures close active popovers, modals, and sheets layer by layer, with confirmation before logging out.
-                        </li>
-                        <li>
-                          <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, responsive slow-network progress &amp; instant cancel, and automatic cleanup on app upgrades.
-                        </li>
-                      </ul>
-
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.2.0-beta</h4>
-                      <ul>
-                        <li>
-                          <strong>Two-Tier Global &amp; Monthly Budget System:</strong> Manage an overall Budget pool with a detailed addition history log, and lend monthly budgets using a synchronized input, smooth slider, and preset chips.
-                        </li>
-                        <li>
-                          <strong>Automatic Past-Month Settlement &amp; Lock:</strong> Unspent monthly budget automatically returns once to your Budget when a month ends, while past months lock to preserve historical records.
-                        </li>
-                        <li>
-                          <strong>Interactive Calendar &amp; Custom Date Picker:</strong> Full month/year dropdowns with auto-expanding year ranges (1970–+50 yrs), day-level filtering, and a custom dropdown calendar in the Add Expense sheet.
-                        </li>
-                        <li>
-                          <strong>Color Themes &amp; UI Polish:</strong> Choose from 6 color themes (Violet, Emerald, Ocean, Rose, Sunset, Slate) in Light or Dark mode, plus tactile 3D FAB depth and app-wide text selection prevention.
-                        </li>
-                        <li>
-                          <strong>Universal Live OTA Engine &amp; Security Hardening:</strong> Full HTML/CSS/JS over-the-air updates, upgraded Capacitor 8.6.0 &amp; AGP 9.5.0, and hardened CSV export validation.
-                        </li>
-                      </ul>
-
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.2-beta</h4>
-                      <ul>
-                        <li>
-                          <strong>Upgraded Forecast Algorithm:</strong> Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines.
-                        </li>
-                        <li>
-                          <strong>Safe Daily Spend Target:</strong> Real-time daily variable spend allowance to keep your budget on track.
-                        </li>
-                        <li>
-                          <strong>Multi-Tier Budget Warnings:</strong> Intelligent alerts for critical over-budget spending, near-budget caution, and on-track status.
-                        </li>
-                        <li>
-                          <strong>Budget Reference Line:</strong> Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
-                        </li>
-                        <li>
-                          <strong>Seamless In-App Updates:</strong> Get the latest features and bug fixes automatically when opening the app.
-                        </li>
-                        <li>
-                          <strong>Update Progress Indicator:</strong> See real-time download and installation progress directly on the startup screen.
-                        </li>
-                        <li>
-                          <strong>Password Toggle:</strong> Tap the eye icon on password fields to view or hide what you type.
-                        </li>
-                        <li>
-                          <strong>Performance & Security Improvements:</strong> Enhanced stability, smoother list rendering, and upgraded data protection.
-                        </li>
-                      </ul>
-
-                      <h4 class="release-version-title" style="font-size: 13px; font-weight: 700; color: var(--primary); margin: 12px 0 4px;">v0.1.0-beta</h4>
-                      <ul>
-                        <li>
-                          <strong>Local-First Offline Mode:</strong> Instant 0ms app open & local expense logging.
-                        </li>
-                        <li>
-                          <strong>Cloud Sync & Pull-to-Refresh:</strong> Background and pull-down gestures to sync across devices.
-                        </li>
-                        <li>
-                          <strong>Guest Mode:</strong> Instant offline guest access without registration.
-                        </li>
-                        <li>
-                          <strong>Username & Email Auth:</strong> Sign up with a unique username and log in via email or username.
-                        </li>
-                        <li>
-                          <strong>Realtime Network Status:</strong> Floating network status pill indicating connection state.
-                        </li>
-                        <li>
-                          <strong>Compact Settings:</strong> Collapsible categories, avatar presets, and about section.
-                        </li>
-                        <li>
-                          <strong>CSV Export:</strong> Direct CSV export to your Downloads folder.
-                        </li>
-                      </ul>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -2100,7 +2007,7 @@
             <button type="button" id="cancel-password" class="btn-ghost">
               Cancel
             </button>
-            <button type="submit" class="btn-primary">Update</button>
+            <button type="submit" id="submit-password-btn" class="btn-primary">Update</button>
           </div>
         </form>
       </div>
@@ -2162,7 +2069,7 @@
             <button type="button" id="cancel-email" class="btn-ghost">
               Cancel
             </button>
-            <button type="submit" class="btn-primary">Update</button>
+            <button type="submit" id="submit-email-btn" class="btn-primary">Update</button>
           </div>
         </form>
       </div>
@@ -2359,6 +2266,172 @@
             </svg>
             <span>github.com/Kuraku01</span>
           </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- WHAT'S NEW MODAL (PAGINATED RELEASE NOTES) -->
+    <div
+      id="whats-new-modal"
+      class="modal-overlay hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="whats-new-modal-title"
+    >
+      <div class="modal-card whats-new-card">
+        <div class="whats-new-header">
+          <div>
+            <h2 id="whats-new-modal-title" style="margin: 0">What's New</h2>
+            <p class="whats-new-sub">Release history &amp; feature highlights</p>
+          </div>
+          <button
+            type="button"
+            id="close-whats-new-modal"
+            class="icon-btn"
+            aria-label="Close What's New"
+          >
+            &times;
+          </button>
+        </div>
+
+        <div class="whats-new-version-bar">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <span id="whats-new-version-pill" class="version-badge">v0.2.2-beta</span>
+            <span id="whats-new-latest-tag" class="channel-badge stable">Latest Release</span>
+          </div>
+          <span id="whats-new-page-indicator" class="whats-new-page-indicator">Page 1 of 5</span>
+        </div>
+
+        <div id="whats-new-pages-wrap" class="whats-new-pages-wrap">
+          <!-- Page 1: v0.2.2-beta -->
+          <div class="whats-new-page" data-version="v0.2.2-beta" data-badge="Latest Release" data-badge-class="channel-badge stable">
+            <ul class="whats-new-list">
+              <li>
+                <strong>Live Web App &amp; Adaptive Multi-Screen Layout:</strong> Budgelist is now available on the web at <code>budgelistapp.web.app</code> with responsive phone, tablet (centered dialogs &amp; 3-column grid), and desktop (2-column split dashboard) layouts.
+              </li>
+              <li>
+                <strong>Customizable Expense Pagination:</strong> Paginate long monthly expense lists and configure how many items appear per page (<code>5</code>, <code>10</code>, <code>15</code>, <code>25</code>, <code>50</code>, or <code>All</code>) in <strong>Settings &rarr; Appearance</strong>.
+              </li>
+              <li>
+                <strong>UI Zoom Presets:</strong> Scale text, cards, and controls between <code>80%</code> and <code>120%</code> in <strong>Settings &rarr; Appearance</strong> without changing your active phone, tablet, or desktop layout.
+              </li>
+              <li>
+                <strong>Click-Outside Popup Dismissal:</strong> Tap or click outside any open bottom sheet or modal dialog to close it immediately.
+              </li>
+              <li>
+                <strong>Developer Profile &amp; Paginated Changelog:</strong> View the creator's profile and browse release notes version-by-version in dedicated popups.
+              </li>
+            </ul>
+          </div>
+
+          <!-- Page 2: v0.2.1-beta -->
+          <div class="whats-new-page hidden" data-version="v0.2.1-beta" data-badge="Previous Release" data-badge-class="channel-badge native">
+            <ul class="whats-new-list">
+              <li>
+                <strong>Redesigned Overview &amp; Spent Progress Bar:</strong> Clear separation between your Budget Pool and Monthly Spending, relocated Currency &amp; Month Budget controls, and an upgraded Spent bar with end-value labels and a live current-spent marker.
+              </li>
+              <li>
+                <strong>Interactive Help Tooltips:</strong> Tap or hover <code>?</code> badges across Overview, Analytics, Bills, Budgets, and Settings for plain-language explanations.
+              </li>
+              <li>
+                <strong>Multi-View Expenses &amp; Recurring Bills:</strong> Switch between Grouped-by-Day/Detailed, Compact, and Grid layouts, filter expenses by category, and step day-by-day or month-by-month from the top bar.
+              </li>
+              <li>
+                <strong>Multi-Layer Android Back Navigation &amp; Logout Confirmation:</strong> Back gestures close active popovers, modals, and sheets layer by layer, with confirmation before logging out.
+              </li>
+              <li>
+                <strong>Integrated Update Center:</strong> Separate Stable Update and Testing Build channels, responsive slow-network progress &amp; instant cancel, and automatic cleanup on app upgrades.
+              </li>
+            </ul>
+          </div>
+
+          <!-- Page 3: v0.2.0-beta -->
+          <div class="whats-new-page hidden" data-version="v0.2.0-beta" data-badge="Previous Release" data-badge-class="channel-badge native">
+            <ul class="whats-new-list">
+              <li>
+                <strong>Two-Tier Global &amp; Monthly Budget System:</strong> Manage an overall Budget pool with a detailed addition history log, and lend monthly budgets using a synchronized input, smooth slider, and preset chips.
+              </li>
+              <li>
+                <strong>Automatic Past-Month Settlement &amp; Lock:</strong> Unspent monthly budget automatically returns once to your Budget when a month ends, while past months lock to preserve historical records.
+              </li>
+              <li>
+                <strong>Interactive Calendar &amp; Custom Date Picker:</strong> Full month/year dropdowns with auto-expanding year ranges (1970–+50 yrs), day-level filtering, and a custom dropdown calendar in the Add Expense sheet.
+              </li>
+              <li>
+                <strong>Color Themes &amp; UI Polish:</strong> Choose from 6 color themes (Violet, Emerald, Ocean, Rose, Sunset, Slate) in Light or Dark mode, plus tactile 3D FAB depth and app-wide text selection prevention.
+              </li>
+              <li>
+                <strong>Universal Live OTA Engine &amp; Security Hardening:</strong> Full HTML/CSS/JS over-the-air updates, upgraded Capacitor 8.6.0 &amp; AGP 9.5.0, and hardened CSV export validation.
+              </li>
+            </ul>
+          </div>
+
+          <!-- Page 4: v0.1.2-beta -->
+          <div class="whats-new-page hidden" data-version="v0.1.2-beta" data-badge="Previous Release" data-badge-class="channel-badge native">
+            <ul class="whats-new-list">
+              <li>
+                <strong>Upgraded Forecast Algorithm:</strong> Multi-factor forecasting incorporating upcoming unpaid recurring bills and multi-month spend velocity baselines.
+              </li>
+              <li>
+                <strong>Safe Daily Spend Target:</strong> Real-time daily variable spend allowance to keep your budget on track.
+              </li>
+              <li>
+                <strong>Multi-Tier Budget Warnings:</strong> Intelligent alerts for critical over-budget spending, near-budget caution, and on-track status.
+              </li>
+              <li>
+                <strong>Budget Reference Line:</strong> Visual dashed reference line on the forecast chart corresponding to your monthly budget limit.
+              </li>
+              <li>
+                <strong>Seamless In-App Updates &amp; Password Toggle:</strong> Startup update progress indicator and eye icon toggle on password fields.
+              </li>
+            </ul>
+          </div>
+
+          <!-- Page 5: v0.1.0-beta -->
+          <div class="whats-new-page hidden" data-version="v0.1.0-beta" data-badge="Initial Release" data-badge-class="channel-badge native">
+            <ul class="whats-new-list">
+              <li>
+                <strong>Local-First Offline Mode:</strong> Instant 0ms app open &amp; local expense logging.
+              </li>
+              <li>
+                <strong>Cloud Sync &amp; Pull-to-Refresh:</strong> Background and pull-down gestures to sync across devices.
+              </li>
+              <li>
+                <strong>Guest Mode:</strong> Instant offline guest access without registration.
+              </li>
+              <li>
+                <strong>Username &amp; Email Auth:</strong> Sign up with a unique username and log in via email or username.
+              </li>
+              <li>
+                <strong>Realtime Network Status &amp; CSV Export:</strong> Floating network status pill and direct CSV export to your Downloads folder.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="whats-new-pagination">
+          <button
+            type="button"
+            id="whats-new-prev-btn"
+            class="btn-ghost whats-new-nav-btn"
+            disabled
+          >
+            &lsaquo; Newer
+          </button>
+          <div id="whats-new-dots" class="whats-new-dots" role="tablist" aria-label="Release versions">
+            <button type="button" class="whats-new-dot active" data-page="0" title="v0.2.2-beta" aria-label="v0.2.2-beta"></button>
+            <button type="button" class="whats-new-dot" data-page="1" title="v0.2.1-beta" aria-label="v0.2.1-beta"></button>
+            <button type="button" class="whats-new-dot" data-page="2" title="v0.2.0-beta" aria-label="v0.2.0-beta"></button>
+            <button type="button" class="whats-new-dot" data-page="3" title="v0.1.2-beta" aria-label="v0.1.2-beta"></button>
+            <button type="button" class="whats-new-dot" data-page="4" title="v0.1.0-beta" aria-label="v0.1.0-beta"></button>
+          </div>
+          <button
+            type="button"
+            id="whats-new-next-btn"
+            class="btn-ghost whats-new-nav-btn"
+          >
+            Older &rsaquo;
+          </button>
         </div>
       </div>
     </div>

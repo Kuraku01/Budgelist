@@ -493,22 +493,142 @@
 .release-notes-wrap {
   border-top: 1px solid var(--line);
   padding-top: 10px;
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
-.release-notes-list {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
-  margin-top: 10px;
-  font-size: 12.5px;
+.android-app-icon {
+  color: #16b378;
+  flex-shrink: 0;
+}
+
+:root[data-theme="dark"] .android-app-icon {
+  color: #3ddc84;
+}
+
+.whats-new-trigger-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+}
+
+.whats-new-trigger-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--ink);
 }
 
-.release-notes-list ul {
+.whats-new-trigger-left svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+.whats-new-trigger-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  padding: 3px 9px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.whats-new-card {
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.whats-new-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.whats-new-sub {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin: 2px 0 0;
+}
+
+.whats-new-version-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.whats-new-page-indicator {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.whats-new-pages-wrap {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.whats-new-list {
   margin: 0;
   padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.whats-new-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.whats-new-nav-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.whats-new-dots {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.whats-new-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: var(--line);
+  cursor: pointer;
+  transition: width 0.2s ease, background-color 0.2s ease;
+}
+
+.whats-new-dot.active {
+  width: 22px;
+  background: var(--primary);
 }
 
 .release-notes-list li {

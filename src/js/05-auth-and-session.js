@@ -31,12 +31,18 @@ const loginForgotPasswordBtn = $("login-forgot-password-btn");
 function setAuthMode(mode) {
   authMode = mode;
   authError.textContent = "";
+  clearButtonBusy(mainAuthBtn);
+  ["username", "auth-id", "password"].forEach((id) => {
+    const el = $(id);
+    if (el) el.classList.remove("input-error");
+  });
   if (mode === "login") {
     usernameFieldWrap.classList.add("hidden");
     if (loginForgotPasswordBtn) loginForgotPasswordBtn.classList.remove("hidden");
     authIdLabel.textContent = "Email or Username";
     $("auth-id").placeholder = "";
     mainAuthBtn.textContent = "Log in";
+    delete mainAuthBtn.dataset.origHtml;
     toggleAuthModeBtn.textContent = "Create account";
     authTitle.textContent = "Budget, listed.";
     authSub.textContent = "Log spending, catch recurring bills, and see where the month is headed before it's over.";
@@ -46,6 +52,7 @@ function setAuthMode(mode) {
     authIdLabel.textContent = "Email";
     $("auth-id").placeholder = "you@example.com";
     mainAuthBtn.textContent = "Create account";
+    delete mainAuthBtn.dataset.origHtml;
     toggleAuthModeBtn.textContent = "Already have an account? Log in";
     authTitle.textContent = "Join Budgelist.";
     authSub.textContent = "Create an account with a unique username to securely save your budget.";
@@ -84,11 +91,14 @@ confirmGuest.addEventListener("click", () => {
 
 resendVerifyBtn.addEventListener("click", async () => {
   if (auth.currentUser) {
+    setButtonBusy(resendVerifyBtn, "Sending...");
     try {
       await sendEmailVerification(auth.currentUser);
       showToast("Verification email sent! Check your inbox.");
     } catch (e) {
       showToast("Could not send verification email. Try again later.");
+    } finally {
+      clearButtonBusy(resendVerifyBtn);
     }
   }
 });
@@ -213,132 +223,192 @@ onAuthStateChanged(auth, async (user) => {
 
 authForm.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (mainAuthBtn && mainAuthBtn.disabled) return;
   authError.textContent = "";
 
-  const online = await checkNetworkConnection();
-  if (!online) {
-    showNetworkModal(
-      "You need an active internet connection to log in or create an account. You can also use Guest mode offline.",
-      () => authForm.dispatchEvent(new Event("submit")),
-      () => { authError.textContent = "Offline. Connect to the internet or continue as Guest."; }
-    );
-    return;
+  const authIdInput = $("auth-id");
+  const passwordInput = $("password");
+  const usernameInput = $("username");
+  const password = passwordInput.value;
+  const identifier = authIdInput.value.trim();
+
+  if (authMode === "signup") {
+    const username = usernameInput.value.trim();
+    if (!username || username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
+      triggerErrorFeedback(
+        authError,
+        "Username must be 3-20 characters (letters, numbers, underscores).",
+        null,
+        [usernameInput]
+      );
+      return;
+    }
+    if (!identifier || !identifier.includes("@") || password.length < 6) {
+      triggerErrorFeedback(
+        authError,
+        "Enter a valid email and password (6+ characters).",
+        null,
+        [!identifier.includes("@") ? authIdInput : passwordInput]
+      );
+      return;
+    }
   }
 
-  const password = $("password").value;
-  const identifier = $("auth-id").value.trim();
+  setButtonBusy(mainAuthBtn, authMode === "login" ? "Signing in..." : "Creating account...");
+  if (toggleAuthModeBtn) toggleAuthModeBtn.disabled = true;
+  if (guestBtn) guestBtn.disabled = true;
 
-  if (authMode === "login") {
-    try {
-      let email = identifier;
-      if (!identifier.includes("@")) {
-        const usernameLower = identifier.toLowerCase();
+  try {
+    const online = await checkNetworkConnection();
+    if (!online) {
+      showNetworkModal(
+        "You need an active internet connection to log in or create an account. You can also use Guest mode offline.",
+        () => authForm.dispatchEvent(new Event("submit")),
+        () => {
+          triggerErrorFeedback(authError, "Offline. Connect to the internet or continue as Guest.");
+        }
+      );
+      return;
+    }
+
+    if (authMode === "login") {
+      try {
+        let email = identifier;
+        if (!identifier.includes("@")) {
+          const usernameLower = identifier.toLowerCase();
+          const uSnap = await getDoc(doc(db, "usernames", usernameLower));
+          if (!uSnap.exists()) {
+            triggerErrorFeedback(
+              authError,
+              "No account found with that username or email.",
+              null,
+              [authIdInput]
+            );
+            return;
+          }
+          email = uSnap.data().email;
+          if (uSnap.data().username) {
+            safeSet(`budgelist-user-${uSnap.data().uid || "login"}-username`, uSnap.data().username);
+          }
+        }
+        await signInWithEmailAndPassword(auth, email, password);
+      } catch (err) {
+        const highlightInputs =
+          err.code === "auth/wrong-password" || err.code === "auth/invalid-credential"
+            ? [passwordInput]
+            : [authIdInput, passwordInput];
+        triggerErrorFeedback(authError, humanAuthError(err.code), null, highlightInputs);
+      }
+    } else {
+      const username = usernameInput.value.trim();
+      const email = identifier;
+      try {
+        const usernameLower = username.toLowerCase();
         const uSnap = await getDoc(doc(db, "usernames", usernameLower));
-        if (!uSnap.exists()) {
-          authError.textContent = "No account found with that username or email.";
+        if (uSnap.exists()) {
+          triggerErrorFeedback(
+            authError,
+            "That username is already taken. Choose another.",
+            null,
+            [usernameInput]
+          );
           return;
         }
-        email = uSnap.data().email;
-        if (uSnap.data().username) {
-          safeSet(`budgelist-user-${uSnap.data().uid || "login"}-username`, uSnap.data().username);
-        }
+        const cred = await createUserWithEmailAndPassword(auth, email, password);
+
+        // Update Auth profile
+        try {
+          await updateProfile(cred.user, { displayName: username, photoURL: "🦊" });
+        } catch (e) {}
+
+        // Store username mapping in Firestore
+        await setDoc(doc(db, "usernames", usernameLower), {
+          uid: cred.user.uid,
+          email: email.toLowerCase(),
+          username: username,
+        });
+
+        // Store user document in Firestore
+        await setDoc(doc(db, "users", cred.user.uid), {
+          email: email.toLowerCase(),
+          username: username,
+          avatar: "🦊",
+          name: username,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+
+        // Local storage cache
+        safeSet(`budgelist-user-${cred.user.uid}-username`, username);
+
+        await sendEmailVerification(cred.user);
+        showToast("Account created! Please check your email for verification.");
+      } catch (err) {
+        const highlightInputs =
+          err.code === "auth/email-already-in-use" || err.code === "auth/invalid-email"
+            ? [authIdInput]
+            : [authIdInput, passwordInput];
+        triggerErrorFeedback(authError, humanAuthError(err.code), null, highlightInputs);
       }
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err) {
-      authError.textContent = humanAuthError(err.code);
     }
-  } else {
-    const username = $("username").value.trim();
-    const email = identifier;
-    if (!username || username.length < 3 || username.length > 20 || !/^[a-zA-Z0-9_]+$/.test(username)) {
-      authError.textContent = "Username must be 3-20 characters (letters, numbers, underscores).";
-      return;
-    }
-    if (!email || password.length < 6) {
-      authError.textContent = "Enter a valid email and password (6+ characters).";
-      return;
-    }
-    try {
-      const usernameLower = username.toLowerCase();
-      const uSnap = await getDoc(doc(db, "usernames", usernameLower));
-      if (uSnap.exists()) {
-        authError.textContent = "That username is already taken. Choose another.";
-        return;
-      }
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-
-      // Update Auth profile
-      try {
-        await updateProfile(cred.user, { displayName: username, photoURL: "🦊" });
-      } catch (e) {}
-
-      // Store username mapping in Firestore
-      await setDoc(doc(db, "usernames", usernameLower), {
-        uid: cred.user.uid,
-        email: email.toLowerCase(),
-        username: username,
-      });
-
-      // Store user document in Firestore
-      await setDoc(doc(db, "users", cred.user.uid), {
-        email: email.toLowerCase(),
-        username: username,
-        avatar: "🦊",
-        name: username,
-        createdAt: new Date().toISOString()
-      }, { merge: true });
-
-      // Local storage cache
-      safeSet(`budgelist-user-${cred.user.uid}-username`, username);
-
-      await sendEmailVerification(cred.user);
-      showToast("Account created! Please check your email for verification.");
-    } catch (err) {
-      authError.textContent = humanAuthError(err.code);
-    }
+  } finally {
+    clearButtonBusy(mainAuthBtn);
+    if (toggleAuthModeBtn) toggleAuthModeBtn.disabled = false;
+    if (guestBtn) guestBtn.disabled = false;
   }
 });
 
 if (loginForgotPasswordBtn) {
   loginForgotPasswordBtn.addEventListener("click", async () => {
+    if (loginForgotPasswordBtn.disabled) return;
     authError.textContent = "";
 
-    const online = await checkNetworkConnection();
-    if (!online) {
-      showNetworkModal(
-        "You need an active internet connection to reset your password.",
-        () => loginForgotPasswordBtn.click(),
-        () => { authError.textContent = "Offline. Connect to the internet to reset password."; }
-      );
-      return;
-    }
-
-    const identifier = $("auth-id").value.trim();
+    const authIdInput = $("auth-id");
+    const identifier = authIdInput.value.trim();
     if (!identifier) {
-      authError.textContent = "Enter your email or username above first.";
+      triggerErrorFeedback(authError, "Enter your email or username above first.", null, [authIdInput]);
       return;
     }
 
+    setButtonBusy(loginForgotPasswordBtn, "Sending...");
     try {
+      const online = await checkNetworkConnection();
+      if (!online) {
+        showNetworkModal(
+          "You need an active internet connection to reset your password.",
+          () => loginForgotPasswordBtn.click(),
+          () => {
+            triggerErrorFeedback(authError, "Offline. Connect to the internet to reset password.");
+          }
+        );
+        return;
+      }
+
       let email = identifier;
       if (!identifier.includes("@")) {
         const usernameLower = identifier.toLowerCase();
         const uSnap = await getDoc(doc(db, "usernames", usernameLower));
         if (!uSnap.exists()) {
-          authError.textContent = "No account found with that username.";
+          triggerErrorFeedback(authError, "No account found with that username.", null, [authIdInput]);
           return;
         }
         email = uSnap.data().email;
       }
       if (!email) {
-        authError.textContent = "No email found for this account.";
+        triggerErrorFeedback(authError, "No email found for this account.", null, [authIdInput]);
         return;
       }
       await sendPasswordResetEmail(auth, email);
       showToast(`Password reset email sent to ${email}`);
       authError.textContent = "";
     } catch (err) {
-      authError.textContent = humanAuthError(err.code) || "Could not send password reset email.";
+      triggerErrorFeedback(
+        authError,
+        humanAuthError(err.code) || "Could not send password reset email.",
+        null,
+        [authIdInput]
+      );
+    } finally {
+      clearButtonBusy(loginForgotPasswordBtn);
     }
   });
 }
