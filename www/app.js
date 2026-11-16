@@ -2109,14 +2109,16 @@ function updateAboutChannelBadge() {
     }
   }
 
-  // On hosted Web App, repurpose "Check for updates" into "Download Android App" with the Android logo
+  // On hosted Web App, repurpose "Check for updates" into "Download Android App" and show topbar Download App button
   if (IS_WEB_HOSTED) {
     const syncIcon = $("check-update-sync-icon");
     const androidIcon = $("check-update-android-icon");
     const btnLabel = $("check-update-btn-label");
+    const topbarDlBtn = $("topbar-download-app-btn");
     if (syncIcon) syncIcon.classList.add("hidden");
     if (androidIcon) androidIcon.classList.remove("hidden");
     if (btnLabel) btnLabel.textContent = "Download Android App";
+    if (topbarDlBtn) topbarDlBtn.classList.remove("hidden");
   }
 }
 
@@ -3519,30 +3521,39 @@ async function downloadAndApplyOtaAsset(zipAsset, latestTag, channel = "stable",
   return false;
 }
 
-$("check-update-btn").addEventListener("click", async () => {
-  const btn = $("check-update-btn");
-  if (IS_WEB_HOSTED) {
-    if (btn && btn.disabled) return;
-    setButtonBusy(btn, "Preparing APK download...");
-    try {
-      const cleanVer = APP_VERSION.replace(/^v/i, "").trim();
-      let apkUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${cleanVer}/Budgelist_${cleanVer}.apk`;
-      const latest = await fetchLatestRelease(true, { allowStaleFallback: true });
-      if (latest) {
-        const info = inspectReleaseAssets(latest);
-        if (info.apkAsset && info.apkAsset.browser_download_url) {
-          apkUrl = info.apkAsset.browser_download_url;
-        } else if (info.releaseUrl) {
-          apkUrl = info.releaseUrl;
-        }
+async function triggerWebApkDownload(btn, busyText = "Preparing APK...") {
+  if (btn && btn.disabled) return;
+  if (btn) setButtonBusy(btn, busyText);
+  try {
+    const cleanVer = APP_VERSION.replace(/^v/i, "").trim();
+    let apkUrl = `https://github.com/${GITHUB_REPO}/releases/download/v${cleanVer}/Budgelist_${cleanVer}.apk`;
+    const latest = await fetchLatestRelease(true, { allowStaleFallback: true });
+    if (latest) {
+      const info = inspectReleaseAssets(latest);
+      if (info.apkAsset && info.apkAsset.browser_download_url) {
+        apkUrl = info.apkAsset.browser_download_url;
+      } else if (info.releaseUrl) {
+        apkUrl = info.releaseUrl;
       }
-      openExternalReleaseUrl(apkUrl);
-      showToast("Downloading Budgelist for Android...");
-    } catch (e) {
-      openExternalReleaseUrl(`https://github.com/${GITHUB_REPO}/releases`);
-    } finally {
-      clearButtonBusy(btn);
     }
+    openExternalReleaseUrl(apkUrl);
+    showToast("Downloading Budgelist for Android...");
+  } catch (e) {
+    openExternalReleaseUrl(`https://github.com/${GITHUB_REPO}/releases`);
+  } finally {
+    if (btn) clearButtonBusy(btn);
+  }
+}
+
+if ($("topbar-download-app-btn")) {
+  $("topbar-download-app-btn").addEventListener("click", () => {
+    triggerWebApkDownload($("topbar-download-app-btn"), "Downloading...");
+  });
+}
+
+$("check-update-btn").addEventListener("click", async () => {
+  if (IS_WEB_HOSTED) {
+    await triggerWebApkDownload($("check-update-btn"), "Preparing APK download...");
     return;
   }
   checkForAppUpdates(false, false);
