@@ -5,7 +5,7 @@ const {
   sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
   updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
   setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
-  collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+  collection, deleteDoc, getDocs, query, orderBy, writeBatch
 } = window.__FIREBASE__ || window;
 
 const app = initializeApp(firebaseConfig);
@@ -67,7 +67,13 @@ function setButtonBusy(btn, busyText = "Loading...") {
   }
   btn.disabled = true;
   btn.classList.add("is-busy");
-  btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${ busyText }</span>`;
+  btn.textContent = "";
+  const spinner = document.createElement("span");
+  spinner.className = "btn-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  const label = document.createElement("span");
+  label.textContent = busyText;
+  btn.append(spinner, label);
 }
 
 function clearButtonBusy(btn) {
@@ -1430,28 +1436,7 @@ $("forgot-password-link").addEventListener("click", async () => {
 });
 
 let isUpdatingEmail = false;
-let isRecoveringSession = false;
 let emailCheckInterval = null;
-
-async function attemptSilentSessionRecovery() {
-  if (isRecoveringSession) return false;
-  isRecoveringSession = true;
-
-  try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("budgelist-pending-email-change-")) {
-        localStorage.removeItem(k);
-      }
-    }
-  } catch (err) {
-    console.error("Error cleaning up pending email state:", err);
-  } finally {
-    isRecoveringSession = false;
-  }
-
-  return false;
-}
 
 function startCheckingEmailVerification(targetEmail) {
   if (emailCheckInterval) clearInterval(emailCheckInterval);
@@ -1490,8 +1475,6 @@ window.addEventListener("focus", async () => {
         showToast("Email updated successfully!");
       }
     } catch (e) {}
-  } else {
-    await attemptSilentSessionRecovery();
   }
 });
 
@@ -1536,14 +1519,6 @@ $("email-form").addEventListener("submit", async (e) => {
   isUpdatingEmail = true;
   setButtonBusy(submitBtn, "Updating...");
 
-  const pendingKey = `budgelist-pending-email-change-${user.uid}`;
-  safeSet(pendingKey, JSON.stringify({
-    oldEmail: user.email.toLowerCase(),
-    newEmail: newEmail.toLowerCase(),
-    uid: user.uid,
-    timestamp: Date.now()
-  }));
-
   try {
     const credential = EmailAuthProvider.credential(user.email, password);
     await reauthenticateWithCredential(user, credential);
@@ -1570,10 +1545,8 @@ $("email-form").addEventListener("submit", async (e) => {
     if (updatedDirectly) {
       try {
         await signInWithEmailAndPassword(auth, newEmail.toLowerCase(), password);
-        localStorage.removeItem(pendingKey);
       } catch (signInErr) {
-        console.warn("Re-login failed after updateEmail, trying recovery:", signInErr);
-        await attemptSilentSessionRecovery();
+        console.warn("Re-login failed after updateEmail:", signInErr);
       }
 
       const activeUser = auth.currentUser || user;
@@ -1980,7 +1953,7 @@ function detectNativeApkVersion() {
       typeof window.AndroidBridge.getNativeBuildSignature === "function"
     ) {
       const sig = window.AndroidBridge.getNativeBuildSignature();
-      if (sig && typeof sig && typeof sig === "string") {
+      if (sig && typeof sig === "string") {
         // Signature format in v0.2.1+: "v<versionName>_<lastUpdateTime>"
         return sig.split("_")[0].replace(/^v/i, "").trim() || APP_VERSION;
       }
@@ -2001,7 +1974,6 @@ function detectNativeApkVersion() {
 const NATIVE_APP_VERSION = detectNativeApkVersion();
 const GITHUB_REPO = "kuraku01/budgelist";
 let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
-let currentLatestTag = "";
 let pendingStartupUpdate = null;
 
 function sanitizeGitHubReleaseUrl(rawUrl, requireAssetDownload = false) {
@@ -2375,7 +2347,6 @@ if (downloadUpdateBtn) {
 
 function showStartupUpdateModal(options) {
   pendingStartupUpdate = options;
-  currentLatestTag = options.latestTag || "";
 
   const startupView = $("update-startup-view");
   const manualView = $("update-manual-view");

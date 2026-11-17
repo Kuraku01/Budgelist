@@ -165,28 +165,7 @@ $("forgot-password-link").addEventListener("click", async () => {
 });
 
 let isUpdatingEmail = false;
-let isRecoveringSession = false;
 let emailCheckInterval = null;
-
-async function attemptSilentSessionRecovery() {
-  if (isRecoveringSession) return false;
-  isRecoveringSession = true;
-
-  try {
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith("budgelist-pending-email-change-")) {
-        localStorage.removeItem(k);
-      }
-    }
-  } catch (err) {
-    console.error("Error cleaning up pending email state:", err);
-  } finally {
-    isRecoveringSession = false;
-  }
-
-  return false;
-}
 
 function startCheckingEmailVerification(targetEmail) {
   if (emailCheckInterval) clearInterval(emailCheckInterval);
@@ -225,8 +204,6 @@ window.addEventListener("focus", async () => {
         showToast("Email updated successfully!");
       }
     } catch (e) {}
-  } else {
-    await attemptSilentSessionRecovery();
   }
 });
 
@@ -271,14 +248,6 @@ $("email-form").addEventListener("submit", async (e) => {
   isUpdatingEmail = true;
   setButtonBusy(submitBtn, "Updating...");
 
-  const pendingKey = `budgelist-pending-email-change-${user.uid}`;
-  safeSet(pendingKey, JSON.stringify({
-    oldEmail: user.email.toLowerCase(),
-    newEmail: newEmail.toLowerCase(),
-    uid: user.uid,
-    timestamp: Date.now()
-  }));
-
   try {
     const credential = EmailAuthProvider.credential(user.email, password);
     await reauthenticateWithCredential(user, credential);
@@ -305,10 +274,8 @@ $("email-form").addEventListener("submit", async (e) => {
     if (updatedDirectly) {
       try {
         await signInWithEmailAndPassword(auth, newEmail.toLowerCase(), password);
-        localStorage.removeItem(pendingKey);
       } catch (signInErr) {
-        console.warn("Re-login failed after updateEmail, trying recovery:", signInErr);
-        await attemptSilentSessionRecovery();
+        console.warn("Re-login failed after updateEmail:", signInErr);
       }
 
       const activeUser = auth.currentUser || user;

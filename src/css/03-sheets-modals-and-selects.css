@@ -631,15 +631,6 @@
   background: var(--primary);
 }
 
-.release-notes-list li {
-  margin-bottom: 6px;
-  line-height: 1.4;
-}
-
-.release-notes-list li:last-child {
-  margin-bottom: 0;
-}
-
 /* Profile Widget in Topbar */
 .profile-widget {
   display: flex;

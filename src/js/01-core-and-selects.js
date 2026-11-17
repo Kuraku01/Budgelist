@@ -5,7 +5,7 @@ const {
   sendPasswordResetEmail, EmailAuthProvider, reauthenticateWithCredential,
   updatePassword, verifyBeforeUpdateEmail, updateProfile, updateEmail,
   setPersistence, browserLocalPersistence, getFirestore, doc, getDoc, setDoc,
-  collection, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, writeBatch
+  collection, deleteDoc, getDocs, query, orderBy, writeBatch
 } = window.__FIREBASE__ || window;
 
 const app = initializeApp(firebaseConfig);
@@ -67,7 +67,13 @@ function setButtonBusy(btn, busyText = "Loading...") {
   }
   btn.disabled = true;
   btn.classList.add("is-busy");
-  btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span><span>${ busyText }</span>`;
+  btn.textContent = "";
+  const spinner = document.createElement("span");
+  spinner.className = "btn-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  const label = document.createElement("span");
+  label.textContent = busyText;
+  btn.append(spinner, label);
 }
 
 function clearButtonBusy(btn) {

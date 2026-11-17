@@ -10,7 +10,6 @@
  *
  * Usage:
  *   node scripts/build.js           # Build src/ -> www/ and sync Android assets
- *   node scripts/build.js --init    # One-time split of existing www/ into src/ and verify 0-diff
  *   node scripts/build.js --check   # Verify www/ and Android assets match src/ without modifying
  */
 
@@ -27,55 +26,6 @@ const SRC_JS_DIR = path.join(SRC_DIR, "js");
 const SRC_CSS_DIR = path.join(SRC_DIR, "css");
 const WWW_DIR = path.join(ROOT, "www");
 const ANDROID_PUBLIC_DIR = path.join(ROOT, "android", "app", "src", "main", "assets", "public");
-
-// Ordered source slices for initial split (--init) and deterministic concatenation
-const JS_MODULES = [
-  { file: "01-core-and-selects.js", startLine: 1, endLine: 450 },
-  { file: "02-storage-and-sync.js", startLine: 451, endLine: 1178 },
-  { file: "03-settings-and-currency.js", startLine: 1179, endLine: 1777 },
-  { file: "04-ota-updates.js", startLine: 1778, endLine: 3284 },
-  { file: "05-auth-and-session.js", startLine: 3285, endLine: 3699 },
-  { file: "06-expenses-and-recurring.js", startLine: 3700, endLine: 4218 },
-  { file: "07-budget-engine.js", startLine: 4219, endLine: 4892 },
-  { file: "08-calendar-and-export.js", startLine: 4893, endLine: 5198 },
-  { file: "09-views-and-overview.js", startLine: 5199, endLine: 6446 },
-  { file: "10-forecast-and-navigation.js", startLine: 6447, endLine: 999999 },
-];
-
-const CSS_MODULES = [
-  { file: "01-themes-and-screens.css", startLine: 1, endLine: 623 },
-  { file: "02-overview-and-calendar.css", startLine: 624, endLine: 1277 },
-  { file: "03-sheets-modals-and-selects.css", startLine: 1278, endLine: 2154 },
-  { file: "04-budgets-updates-and-views.css", startLine: 2155, endLine: 999999 },
-];
-
-function sliceLinesExact(content, startLine, endLine) {
-  const lines = content.split("\n");
-  const actualEnd = Math.min(lines.length, endLine);
-  return lines.slice(startLine - 1, actualEnd).join("\n");
-}
-
-function initFromWww() {
-  fs.mkdirSync(SRC_JS_DIR, { recursive: true });
-  fs.mkdirSync(SRC_CSS_DIR, { recursive: true });
-
-  const appJs = fs.readFileSync(path.join(WWW_DIR, "app.js"), "utf8");
-  const styleCss = fs.readFileSync(path.join(WWW_DIR, "style.css"), "utf8");
-  const indexHtml = fs.readFileSync(path.join(WWW_DIR, "index.html"), "utf8");
-
-  for (const mod of JS_MODULES) {
-    const chunk = sliceLinesExact(appJs, mod.startLine, mod.endLine);
-    fs.writeFileSync(path.join(SRC_JS_DIR, mod.file), chunk, "utf8");
-  }
-
-  for (const mod of CSS_MODULES) {
-    const chunk = sliceLinesExact(styleCss, mod.startLine, mod.endLine);
-    fs.writeFileSync(path.join(SRC_CSS_DIR, mod.file), chunk, "utf8");
-  }
-
-  fs.writeFileSync(path.join(SRC_DIR, "index.html"), indexHtml, "utf8");
-  console.log(`[init] Populated src/js (${JS_MODULES.length} files), src/css (${CSS_MODULES.length} files), and src/index.html.`);
-}
 
 function copyDirRecursive(srcDir, destDir) {
   if (!fs.existsSync(srcDir)) return;
@@ -172,10 +122,7 @@ function buildAll(checkOnly = false) {
 }
 
 const args = process.argv.slice(2);
-if (args.includes("--init")) {
-  initFromWww();
-  buildAll(false);
-} else if (args.includes("--check")) {
+if (args.includes("--check")) {
   buildAll(true);
 } else {
   buildAll(false);

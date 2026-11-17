@@ -24,7 +24,7 @@ function detectNativeApkVersion() {
       typeof window.AndroidBridge.getNativeBuildSignature === "function"
     ) {
       const sig = window.AndroidBridge.getNativeBuildSignature();
-      if (sig && typeof sig && typeof sig === "string") {
+      if (sig && typeof sig === "string") {
         // Signature format in v0.2.1+: "v<versionName>_<lastUpdateTime>"
         return sig.split("_")[0].replace(/^v/i, "").trim() || APP_VERSION;
       }
@@ -45,7 +45,6 @@ function detectNativeApkVersion() {
 const NATIVE_APP_VERSION = detectNativeApkVersion();
 const GITHUB_REPO = "kuraku01/budgelist";
 let updateDownloadUrl = `https://github.com/${GITHUB_REPO}/releases`;
-let currentLatestTag = "";
 let pendingStartupUpdate = null;
 
 function sanitizeGitHubReleaseUrl(rawUrl, requireAssetDownload = false) {
@@ -419,7 +418,6 @@ if (downloadUpdateBtn) {
 
 function showStartupUpdateModal(options) {
   pendingStartupUpdate = options;
-  currentLatestTag = options.latestTag || "";
 
   const startupView = $("update-startup-view");
   const manualView = $("update-manual-view");

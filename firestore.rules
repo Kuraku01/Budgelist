@@ -9,12 +9,30 @@ service cloud.firestore {
       allow list: if false;
       // Only authenticated users can create their username mapping matching their credentials
       allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'username'])
         && request.resource.data.uid == request.auth.uid
-        && request.resource.data.email == request.auth.token.email;
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 3
+        && request.resource.data.email.size() <= 254
+        && request.resource.data.email.lower() == request.auth.token.email.lower()
+        && (!('username' in request.resource.data) || (
+          request.resource.data.username is string
+          && request.resource.data.username == username
+          && username.size() >= 3
+          && username.size() <= 30
+        ));
       // Allow update/delete only by existing document owner without UID reassignment
       allow update: if request.auth != null
         && resource.data.uid == request.auth.uid
-        && request.resource.data.uid == request.auth.uid;
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'username'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email is string
+        && request.resource.data.email.size() >= 3
+        && request.resource.data.email.size() <= 254
+        && (!('username' in request.resource.data) || (
+          request.resource.data.username is string
+          && request.resource.data.username == username
+        ));
       allow delete: if request.auth != null
         && resource.data.uid == request.auth.uid;
     }
@@ -27,7 +45,9 @@ service cloud.firestore {
         allow create, update: if request.auth != null
           && request.auth.uid == userId
           && request.resource.data.amount is number
-          && request.resource.data.amount > 0;
+          && request.resource.data.amount > 0
+          && (!('category' in request.resource.data) || (request.resource.data.category is string && request.resource.data.category.size() <= 60))
+          && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
 
@@ -36,7 +56,9 @@ service cloud.firestore {
         allow create, update: if request.auth != null
           && request.auth.uid == userId
           && request.resource.data.amount is number
-          && request.resource.data.amount > 0;
+          && request.resource.data.amount > 0
+          && (!('category' in request.resource.data) || (request.resource.data.category is string && request.resource.data.category.size() <= 60))
+          && (!('note' in request.resource.data) || (request.resource.data.note is string && request.resource.data.note.size() <= 500));
         allow delete: if request.auth != null && request.auth.uid == userId;
       }
     }
