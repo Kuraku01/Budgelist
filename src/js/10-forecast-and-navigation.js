@@ -645,6 +645,10 @@ function closeTopmostOverlayLayer() {
   }
 
   if (isOverlayVisible("global-budget-sheet")) {
+    if (isOverlayVisible("clear-pool-confirm-box")) {
+      $("clear-pool-confirm-box").classList.add("hidden");
+      return true;
+    }
     if (isOverlayVisible("clear-budget-confirm-box")) {
       $("clear-budget-confirm-box").classList.add("hidden");
       return true;

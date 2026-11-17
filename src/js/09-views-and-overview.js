@@ -176,6 +176,9 @@ function renderSummaryCard(spent) {
       ? `Your Budget Pool holds ${fmt(globalBudget)} in unallocated reserve funds. Allocate part of it to a monthly cap below, or leave months on 'Uses Pool' to deduct expenses directly. Unspent monthly budget automatically returns here once a month ends.`
       : `Your Budget Pool is currently ${fmt(0)}. Tap '+ Add / History' to deposit your income, allowance, or savings—then set a monthly cap or spend directly from this pool.`;
   }
+  if (globalBudgetSheet && !globalBudgetSheet.classList.contains("hidden") && typeof renderBudgetHistoryList === "function") {
+    renderBudgetHistoryList();
+  }
 
   const monthlyTitleEl = $("monthly-overview-title");
   const monthlyModePill = $("monthly-mode-pill");

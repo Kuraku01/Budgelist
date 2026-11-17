@@ -348,12 +348,59 @@ function renderBudgetHistoryList() {
   const emptyEl = $("budget-history-empty");
   const clearBtn = $("clear-budget-history-btn");
   const confirmBox = $("clear-budget-confirm-box");
-  if (!listEl || !emptyEl) return;
+  const confirmTextEl = $("clear-budget-confirm-text");
+  const logOnlyBtn = $("clear-history-log-only-btn");
+  const resetAllBtn = $("clear-history-reset-all-btn");
+
+  const clearPoolBtn = $("clear-pool-budget-btn");
+  const clearPoolConfirmBox = $("clear-pool-confirm-box");
+  const clearPoolConfirmText = $("clear-pool-confirm-text");
+  const clearPoolOnlyBtn = $("confirm-clear-pool-only-btn");
+  const clearPoolAndHistoryBtn = $("confirm-clear-pool-and-history-btn");
 
   const items = Array.isArray(budgetHistory) ? budgetHistory : [];
-  emptyEl.classList.toggle("hidden", items.length > 0);
-  if (clearBtn) clearBtn.classList.toggle("hidden", items.length === 0);
-  if (items.length === 0 && confirmBox) confirmBox.classList.add("hidden");
+  const hasHistory = items.length > 0;
+  const hasPoolBalance = round2(globalBudget) > 0;
+
+  if (clearPoolBtn) {
+    clearPoolBtn.classList.toggle("hidden", !hasPoolBalance);
+  }
+  if (!hasPoolBalance && clearPoolConfirmBox) {
+    clearPoolConfirmBox.classList.add("hidden");
+  }
+  if (clearPoolConfirmText) {
+    clearPoolConfirmText.textContent = `Reset your available Budget Pool (${fmt(globalBudget)}) to ${fmt(0)}?`;
+  }
+  if (clearPoolOnlyBtn) {
+    clearPoolOnlyBtn.textContent = hasHistory ? `Clear Pool Only (${fmt(0)})` : `Clear Budget (${fmt(0)})`;
+  }
+  if (clearPoolAndHistoryBtn) {
+    clearPoolAndHistoryBtn.classList.toggle("hidden", !hasHistory);
+  }
+
+  if (!listEl || !emptyEl) return;
+
+  emptyEl.classList.toggle("hidden", hasHistory);
+  if (clearBtn) {
+    clearBtn.classList.toggle("hidden", !hasHistory && !hasPoolBalance);
+    clearBtn.textContent = hasHistory ? "Clear all" : "Clear budget";
+  }
+  if (!hasHistory && !hasPoolBalance && confirmBox) {
+    confirmBox.classList.add("hidden");
+  }
+  if (confirmTextEl) {
+    confirmTextEl.textContent = hasHistory
+      ? "How would you like to clear budget history?"
+      : `Reset your available Budget Pool (${fmt(globalBudget)}) to ${fmt(0)}?`;
+  }
+  if (logOnlyBtn) {
+    logOnlyBtn.classList.toggle("hidden", !hasHistory);
+  }
+  if (resetAllBtn) {
+    resetAllBtn.textContent = hasHistory
+      ? `Reset Budget (${fmt(0)}) & Clear`
+      : `Clear Budget (${fmt(0)})`;
+  }
 
   listEl.innerHTML = "";
   const frag = document.createDocumentFragment();
@@ -414,6 +461,7 @@ function renderBudgetHistoryList() {
 
 function openGlobalBudgetSheet() {
   if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+  if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
   renderBudgetHistoryList();
   if (globalBudgetSheet) globalBudgetSheet.classList.remove("hidden");
 }
@@ -421,6 +469,7 @@ function openGlobalBudgetSheet() {
 function closeGlobalBudgetSheet() {
   if (globalBudgetForm) globalBudgetForm.reset();
   if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+  if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
   if (globalBudgetSheet) globalBudgetSheet.classList.add("hidden");
 }
 
@@ -457,9 +506,46 @@ if (globalBudgetForm) {
   });
 }
 
+if ($("clear-pool-budget-btn")) {
+  $("clear-pool-budget-btn").addEventListener("click", () => {
+    const poolBox = $("clear-pool-confirm-box");
+    if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
+    renderBudgetHistoryList();
+    if (poolBox) poolBox.classList.toggle("hidden");
+  });
+}
+if ($("cancel-clear-pool-btn")) {
+  $("cancel-clear-pool-btn").addEventListener("click", () => {
+    if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
+  });
+}
+if ($("confirm-clear-pool-only-btn")) {
+  $("confirm-clear-pool-only-btn").addEventListener("click", () => {
+    globalBudget = 0;
+    if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
+    syncBudgetState();
+    renderBudgetHistoryList();
+    render();
+    showToast(`Budget Pool reset to ${fmt(0)}`);
+  });
+}
+if ($("confirm-clear-pool-and-history-btn")) {
+  $("confirm-clear-pool-and-history-btn").addEventListener("click", () => {
+    budgetHistory = [];
+    globalBudget = 0;
+    if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
+    syncBudgetState();
+    renderBudgetHistoryList();
+    render();
+    showToast(`Budget reset to ${fmt(0)} & history cleared`);
+  });
+}
+
 if ($("clear-budget-history-btn")) {
   $("clear-budget-history-btn").addEventListener("click", () => {
     const box = $("clear-budget-confirm-box");
+    if ($("clear-pool-confirm-box")) $("clear-pool-confirm-box").classList.add("hidden");
+    renderBudgetHistoryList();
     if (box) box.classList.toggle("hidden");
   });
 }
@@ -480,13 +566,14 @@ if ($("clear-history-log-only-btn")) {
 }
 if ($("clear-history-reset-all-btn")) {
   $("clear-history-reset-all-btn").addEventListener("click", () => {
+    const hadHistory = Array.isArray(budgetHistory) && budgetHistory.length > 0;
     budgetHistory = [];
     globalBudget = 0;
     if ($("clear-budget-confirm-box")) $("clear-budget-confirm-box").classList.add("hidden");
     syncBudgetState();
     renderBudgetHistoryList();
     render();
-    showToast("Budget reset to $0.00 & history cleared");
+    showToast(hadHistory ? `Budget reset to ${fmt(0)} & history cleared` : `Budget Pool reset to ${fmt(0)}`);
   });
 }
 

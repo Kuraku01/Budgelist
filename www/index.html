@@ -1295,7 +1295,18 @@
                 aria-label="About Available Unallocated Reserve"
               >?</button>
             </div>
-            <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+            <div class="global-sheet-balance-val-row">
+              <span id="global-sheet-balance" class="global-sheet-balance-val">$0.00</span>
+              <button
+                type="button"
+                id="clear-pool-budget-btn"
+                class="pool-clear-btn hidden"
+                aria-label="Clear budget pool"
+                title="Reset unallocated budget pool to zero"
+              >
+                Clear
+              </button>
+            </div>
           </div>
           <button
             type="button"
@@ -1319,6 +1330,21 @@
               <path d="M20 16H4M9 12l-5 4 5 4" />
             </svg>
           </button>
+        </div>
+
+        <div id="clear-pool-confirm-box" class="clear-budget-confirm-box hidden" style="margin-bottom: 14px;">
+          <p id="clear-pool-confirm-text">Reset your available Budget Pool to $0.00?</p>
+          <div class="clear-budget-confirm-actions">
+            <button type="button" id="confirm-clear-pool-only-btn" class="btn-danger" style="font-size: 12px;">
+              Clear Budget ($0)
+            </button>
+            <button type="button" id="confirm-clear-pool-and-history-btn" class="btn-ghost hidden" style="font-size: 12px; color: var(--warn);">
+              Clear Budget &amp; History
+            </button>
+            <button type="button" id="cancel-clear-pool-btn" class="btn-ghost" style="font-size: 12px;">
+              Cancel
+            </button>
+          </div>
         </div>
 
         <form id="global-budget-form" style="margin-bottom: 18px;">
@@ -1352,7 +1378,7 @@
           </div>
 
           <div id="clear-budget-confirm-box" class="clear-budget-confirm-box hidden">
-            <p>How would you like to clear budget history?</p>
+            <p id="clear-budget-confirm-text">How would you like to clear budget history?</p>
             <div class="clear-budget-confirm-actions">
               <button type="button" id="clear-history-log-only-btn" class="btn-ghost" style="font-size: 12px;">
                 Clear Log Only
